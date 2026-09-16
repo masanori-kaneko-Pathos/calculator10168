@@ -77,6 +77,7 @@
     color: #363636;
     font-size: 22px;
     cursor: pointer;
+    user-select: none;
   }
   
   .keypad button:hover {
