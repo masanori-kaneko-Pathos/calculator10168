@@ -1251,10 +1251,14 @@ export class App {
     // 整数部分 + 小数部分 = 10桁
     let decimalDigits = Math.max(0, 10 - integerDigits);
 
+    const factor = Math.pow(10, decimalDigits);
+    const truncated =
+      Math.trunc(mantissa * factor) / factor;
+
     const mantissaText =
       decimalDigits === 0
-        ? `${Math.round(mantissa)}.`
-        : mantissa.toFixed(decimalDigits);
+        ? truncated.toString()
+        : truncated.toFixed(decimalDigits);
 
 
     return isNegative
