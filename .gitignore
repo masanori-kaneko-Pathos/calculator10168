@@ -1,5 +1,24 @@
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
+# Dependencies
+node_modules/
+
+# Angular
+.angular/
+
+# VS Code
+.vscode/
+
+# Build output
+dist/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # Compiled output
 /dist
 /tmp
