@@ -1,0 +1,94 @@
+.calculator {
+    width: 360px;
+    padding: 20px;
+    margin: 40px auto;
+    background-color: ghostwhite;
+    border-radius: 20px;
+    box-sizing: border-box;
+  }
+  
+  .display {
+    position: relative;
+    height: 80px;
+    margin-bottom: 20px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    background-color: #eeeeee;
+    color: #404040;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .display-value {
+    width: 100%;
+    font-size: 40px;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    position: relative;
+  }
+  
+  .display-sign {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  
+    font-size: 30px;
+    line-height: 1;
+  }
+  
+  .display-e {
+    position: absolute;
+    left: 0;
+    top: calc(50% + 10px);
+  
+    font-size: 24px;
+    line-height: 1;
+  }
+  
+  .display-number {
+    flex-shrink: 0;
+  }
+  
+  
+  
+  .operator-display {
+    position: absolute;
+    top: 2px;
+    right: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #404040;
+  }
+  
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  
+  .keypad button {
+    height: 50px;
+    border: none;
+    border-radius: 50%;
+    background-color: #c1c1c1;
+    color: #212121;
+    font-size: 22px;
+    cursor: pointer;
+  }
+  
+  .keypad button:hover {
+    background-color: #969696;
+  }
+
+  .keypad button:active {
+    background-color: dimgray
+  }
+  
+  .equal {
+    grid-column: 2 / 5;
+    border-radius: 0%;
+  }

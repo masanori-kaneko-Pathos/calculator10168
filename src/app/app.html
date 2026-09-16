@@ -1,0 +1,45 @@
+<div class="calculator">
+  <div class="display">
+    <div class="operator-display">
+      {{ operator }}
+    </div>
+
+    <div class="display-value">
+      <span class="display-sign" *ngIf="displayPrefix === '－'">－</span>
+    
+      <span class="display-e" *ngIf="isOverflow">E</span>
+    
+      <span class="display-number">{{ displayNumber }}</span>
+    </div>
+  </div>
+
+  <div class="keypad">
+
+    <button (click)="inputPercent()">%</button>
+    <button (click)="inputDigit('7')">7</button>
+    <button (click)="inputDigit('8')">8</button>
+    <button (click)="inputDigit('9')">9</button>
+    <button (click)="inputOperator('÷')">÷</button>
+   
+    <button (click)="inputSquareRoot()">√</button>
+    <button (click)="inputDigit('4')">4</button>
+    <button (click)="inputDigit('5')">5</button>
+    <button (click)="inputDigit('6')">6</button>
+    <button (click)="inputOperator('×')">×</button>
+
+    <button (click)="clear()">C</button>
+    <button (click)="inputDigit('1')">1</button>
+    <button (click)="inputDigit('2')">2</button>
+    <button (click)="inputDigit('3')">3</button>
+    <button (click)="inputOperator('-')">−</button>
+   
+
+    <button (click)="clearAll()">AC</button>
+    <button (click)="inputDigit('0')">0</button>
+    <button (click)="inputDecimal()">.</button>
+    <button (click)="toggleSign()">±</button>
+    <button (click)="inputOperator('+')">+</button>
+
+    <button class="equal" (click)="calculate()">=</button>
+  </div>
+</div>
