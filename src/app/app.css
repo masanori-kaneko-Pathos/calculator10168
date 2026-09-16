@@ -54,7 +54,6 @@
   }
   
   
-  
   .operator-display {
     position: absolute;
     top: 2px;
@@ -74,8 +73,8 @@
     height: 50px;
     border: none;
     border-radius: 50%;
-    background-color: #c1c1c1;
-    color: #212121;
+    background-color: #d6d6d6;
+    color: #363636;
     font-size: 22px;
     cursor: pointer;
   }
@@ -85,10 +84,10 @@
   }
 
   .keypad button:active {
-    background-color: dimgray
+    background-color: #767676
   }
   
-  .equal {
+  .keypad button.equal {
     grid-column: 2 / 5;
-    border-radius: 0%;
+    border-radius: 25px;
   }
