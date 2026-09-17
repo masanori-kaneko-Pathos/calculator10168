@@ -13,4 +13,4 @@ Angularで作成した提出用の電卓アプリです。
 - [app.html](./src/app/app.html) — 画面構成
 - [app.css](./src/app/app.css) — デザイン
 
-- [TESE.md](TEST.md) - テストケース
+- [TESE.md](.src/TEST.md) - テストケース
