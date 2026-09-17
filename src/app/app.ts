@@ -1213,7 +1213,7 @@ export class App {
     // ① 1未満の小数の場合（例：0.666666666...）
     // ---------------------------------------------------------
     if (absValue < 1) {
-      // 8桁で「切り捨て」を行う
+      // 9桁で「切り捨て」を行う
       const factor = 100_000_000;
       const truncated = Math.trunc(safeValue * factor) / factor;
 
@@ -1272,7 +1272,7 @@ export class App {
     let integerDigits = Math.floor(mantissa).toString().length;
 
     // 整数部分 + 小数部分 = 10桁
-    let decimalDigits = Math.max(0, 10 - integerDigits);
+    let decimalDigits = Math.min(8,Math.max(0, 10 - integerDigits));
 
     const factor = Math.pow(10, decimalDigits);
     const truncated =
