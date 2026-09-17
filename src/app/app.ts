@@ -173,6 +173,16 @@ export class App {
       return;
     }
 
+    if (this.currentValue.includes('.')) {
+      const parts = this.currentValue.split('.');
+      const decimalPart = parts[1]; // 小数点より右側の文字列
+
+      if (decimalPart && decimalPart.length >= 8) {
+        // すでに小数第8位まで入力されていたら、入力を無視
+        return; 
+      }
+    }
+
 
     // ---------------------------------------------------------
     // それ以外は末尾に追加
@@ -1102,6 +1112,11 @@ export class App {
     if (this.waitingForOperand) {
       return;
     }
+    
+    //%を用いた計算結果は消さない
+    if (this.percentMode) {
+      return;
+    }
 
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
@@ -1190,8 +1205,8 @@ export class App {
     // ① 1未満の小数の場合（例：0.666666666...）
     // ---------------------------------------------------------
     if (absValue < 1) {
-      // 9桁で「切り捨て」を行う
-      const factor = 1_000_000_000;
+      // 8桁で「切り捨て」を行う
+      const factor = 100_000_000;
       const truncated = Math.trunc(safeValue * factor) / factor;
 
       if (truncated === 0) {
@@ -1209,7 +1224,7 @@ export class App {
     // ---------------------------------------------------------
     const integerDigits = Math.floor(absValue).toString().length;
     // 整数部を除いた、小数に使える残り桁数を計算（合計10桁）
-    const decimalDigits = Math.max(0, 10 - integerDigits);
+    const decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
 
     // 残り桁数に合わせて「切り捨て」を行う
     const factor = Math.pow(10, decimalDigits);
@@ -1257,7 +1272,7 @@ export class App {
 
     const mantissaText =
       decimalDigits === 0
-        ? truncated.toString()
+        ? `${truncated.toString()}.`
         : truncated.toFixed(decimalDigits);
 
 
