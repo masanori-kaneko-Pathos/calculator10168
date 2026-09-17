@@ -57,6 +57,11 @@ export class App {
   // この場合は最終的に 12 が入る。
   lastOperand: number | null = null;
 
+  // =========================================================
+  // = で計算された直後かどうかの専用フラグ
+  // =========================================================
+  calculatedByEqual = false;
+
 
   // =========================================================
   // % 専用状態
@@ -100,7 +105,7 @@ export class App {
       this.justCalculated = false;
       this.waitingForOperand = false;
 
-      this.resetRepeatState();
+      this.calculatedByEqual = false;
       this.isOverflow = false;
 
       return;
@@ -677,6 +682,7 @@ export class App {
 
     this.waitingForOperand = false;
     this.justCalculated = true;
+    this.calculatedByEqual = false;
     this.clearPercentState();
   }
 
@@ -697,7 +703,7 @@ export class App {
     // =========================================================
 
     if (
-      this.justCalculated &&
+      this.operator === null &&
       this.lastOperator !== null &&
       this.lastOperand !== null
     ) {
@@ -713,6 +719,7 @@ export class App {
       this.currentValue = this.formatNumber(result);
 
       this.justCalculated = true;
+      this.calculatedByEqual = true;
 
       return;
     }
@@ -845,6 +852,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
+        this.calculatedByEqual = true; 
 
         this.clearPercentState();
 
@@ -1104,7 +1112,7 @@ export class App {
 
     // 計算結果表示中は C では消さない
     // AC なら clearAll() で完全に消せる
-    if (this.justCalculated) {
+    if (this.calculatedByEqual) {
       return;
     }
 
@@ -1112,7 +1120,7 @@ export class App {
     if (this.waitingForOperand) {
       return;
     }
-    
+
     //%を用いた計算結果は消さない
     if (this.percentMode) {
       return;
@@ -1168,7 +1176,7 @@ export class App {
     this.previousRightOperand = null;
     this.leftSignChanged = false;
     this.multiplySignChanged = false;
-
+    this.calculatedByEqual = false;
     this.clearPercentState();
   }
 
