@@ -30,6 +30,8 @@ export class App {
   // 計算結果を表示した直後か
   justCalculated = false;
 
+  // = で計算された直後かどうか
+  calculatedByEqual = false;
 
 
   // =========================================================
@@ -56,11 +58,6 @@ export class App {
   //
   // この場合は最終的に 12 が入る。
   lastOperand: number | null = null;
-
-  // =========================================================
-  // = で計算された直後かどうかの専用フラグ
-  // =========================================================
-  calculatedByEqual = false;
 
 
   // =========================================================
@@ -184,11 +181,9 @@ export class App {
 
       if (decimalPart && decimalPart.length >= 8) {
         // すでに小数第8位まで入力されていたら、入力を無視
-        return; 
+        return;
       }
     }
-
-
     // ---------------------------------------------------------
     // それ以外は末尾に追加
     // ---------------------------------------------------------
@@ -216,7 +211,7 @@ export class App {
       this.justCalculated = false;
       this.waitingForOperand = false;
 
-      this.resetRepeatState();
+      this.calculatedByEqual = false;
 
       return;
     }
@@ -297,7 +292,7 @@ export class App {
 
       this.waitingForOperand = true;
       this.justCalculated = false;
-
+      this.calculatedByEqual = false;
       this.clearPercentState();
 
       return;
@@ -357,6 +352,7 @@ export class App {
     this.operator = nextOperator;
     this.waitingForOperand = true;
     this.justCalculated = false;
+    this.calculatedByEqual = false;
   }
 
   // =========================================================
@@ -476,7 +472,6 @@ export class App {
 
       // -------------------------------------------------------
       // -
-      //
       // 50 - 20 %
       // → 40
       // -------------------------------------------------------
@@ -780,6 +775,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
+        this.calculatedByEqual = true;
 
         this.clearPercentState();
 
@@ -816,7 +812,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
-
+        this.calculatedByEqual = true;
         this.clearPercentState();
 
         return;
@@ -852,7 +848,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
-        this.calculatedByEqual = true; 
+        this.calculatedByEqual = true;
 
         this.clearPercentState();
 
@@ -1027,7 +1023,7 @@ export class App {
     this.operator = null;
     this.waitingForOperand = false;
     this.justCalculated = true;
-
+    this.calculatedByEqual = true;
     // 次の新しい計算のためにフラグをリセット
     this.leftSignChanged = false;
     this.multiplySignChanged = false;
@@ -1282,7 +1278,7 @@ export class App {
     let integerDigits = Math.floor(mantissa).toString().length;
 
     // 整数部分 + 小数部分 = 10桁
-    let decimalDigits = Math.min(8,Math.max(0, 10 - integerDigits));
+    let decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
 
     const factor = Math.pow(10, decimalDigits);
     const truncated =
