@@ -974,7 +974,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
-        this.calculatedByEqual = true; // ←Cボタン用フラグも一応忘れずに
+        this.calculatedByEqual = true; 
 
         this.clearPercentState();
 
