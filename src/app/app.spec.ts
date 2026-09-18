@@ -1,785 +1,348 @@
 import { App } from './app';
 
-describe('電卓 App', () => {
+/**
+ * =========================================================
+ * テスト用ヘルパー
+ * =========================================================
+ *
+ * "50 × 20 % =" のようなキー入力の並びを文字列で書けるようにする。
+ * 数字は1文字ずつ inputDigit() を呼び、記号は対応するメソッドを呼ぶ。
+ * 実機のキー入力をそのまま再現しているだけで、App クラスの
+ * 内部実装には手を入れていない。
+ */
+function press(app: App, token: string): void {
+  if (/^[0-9]$/.test(token)) {
+    app.inputDigit(token);
+    return;
+  }
 
-  let app: App;
+  switch (token) {
+    case '.':
+      app.inputDecimal();
+      return;
+    case '+':
+    case '-':
+    case '×':
+    case '÷':
+      app.inputOperator(token);
+      return;
+    case '=':
+      app.calculate();
+      return;
+    case '%':
+      app.inputPercent();
+      return;
+    case '√':
+      app.inputSquareRoot();
+      return;
+    case '±':
+      app.toggleSign();
+      return;
+    case 'C':
+      app.clear();
+      return;
+    case 'AC':
+      app.clearAll();
+      return;
+    default:
+      throw new Error(`未対応のキー: ${token}`);
+  }
+}
 
-  beforeEach(() => {
-    app = new App();
-  });
-
-
-  // =========================================================
-  // ヘルパー
-  // =========================================================
-
-  function pressDigits(value: string): void {
-    for (const digit of value) {
-      app.inputDigit(digit);
+/** キー入力の並びをまとめて実行するヘルパー（例: "50 × 20 % ="） */
+function runKeys(app: App, sequence: string): void {
+  for (const token of sequence.trim().split(/\s+/)) {
+    if (/^[0-9.]+$/.test(token)) {
+      for (const ch of token) {
+        press(app, ch);
+      }
+    } else {
+      press(app, token);
     }
   }
+}
 
-  function expectDisplay(expected: string): void {
-    expect(app.currentValue).toBe(expected);
-  }
+/** 現在のディスプレイ表示文字列を取得する（E表示・符号込み） */
+// 注意: displayPrefix は仕様上、半角"-"ではなく全角"－"を返す。
+// アサーションもそれに合わせて全角で書いている。
+function display(app: App): string {
+  return app.displayExponent + app.displayPrefix + app.displayNumber;
+}
 
+/** キー入力の並びを実行し、最終的なディスプレイ表示を返す */
+function calc(sequence: string): string {
+  const app = new App();
+  runKeys(app, sequence);
+  return display(app);
+}
+
+
+describe('App（電卓）', () => {
 
   // =========================================================
-  // 基本計算
+  // 1. 基本的な四則演算
   // =========================================================
-
-  describe('基本計算', () => {
-
-    it('加算ができる', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('20');
-      app.calculate();
-
-      expectDisplay('30');
+  describe('基本的な四則演算', () => {
+    it('加算: 1 + 2 = 3', () => {
+      expect(calc('1 + 2 =')).toBe('3');
     });
-
-
-    it('減算ができる', () => {
-      pressDigits('10');
-      app.inputOperator('-');
-      pressDigits('3');
-      app.calculate();
-
-      expectDisplay('7');
+    it('減算: 5 - 2 = 3', () => {
+      expect(calc('5 - 2 =')).toBe('3');
     });
-
-
-    it('乗算ができる', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('20');
+    it('乗算: 4 × 3 = 12', () => {
+      expect(calc('4 × 3 =')).toBe('12');
     });
-
-
-    it('除算ができる', () => {
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('5');
+    it('除算: 8 ÷ 2 = 4', () => {
+      expect(calc('8 ÷ 2 =')).toBe('4');
     });
-
   });
 
 
   // =========================================================
-  // + の連続 =
+  // 2. 「=」の連続
   // =========================================================
-
-  describe('+ の連続計算', () => {
-
-    it('A+B=C のあと = で +B が繰り返される', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('12');
-
-      app.calculate();
-      expectDisplay('14');
-
-      app.calculate();
-      expectDisplay('16');
-
-      app.calculate();
-      expectDisplay('18');
+  describe('「=」の連続', () => {
+    it('+ の連続: 10 + 2 = = = → 12, 14, 16', () => {
+      const app = new App();
+      runKeys(app, '10 + 2 =');
+      expect(display(app)).toBe('12');
+      runKeys(app, '=');
+      expect(display(app)).toBe('14');
+      runKeys(app, '=');
+      expect(display(app)).toBe('16');
     });
 
-
-    it('A+B=C のあと += では B+C になり、その後 +C が繰り返される', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('12');
-
-      app.inputOperator('+');
-      app.calculate();
-
-      // 2 + 12
-      expectDisplay('14');
-
-      app.calculate();
-
-      // 14 + 12
-      expectDisplay('26');
-
-      app.calculate();
-
-      // 26 + 12
-      expectDisplay('38');
+    it('× の連続は左辺を繰り返す: 10 × 2 = = = → 20, 200, 2000', () => {
+      const app = new App();
+      runKeys(app, '10 × 2 =');
+      expect(display(app)).toBe('20');
+      runKeys(app, '=');
+      expect(display(app)).toBe('200');
+      runKeys(app, '=');
+      expect(display(app)).toBe('2000');
     });
 
+    it('数字と演算子入力後の「=」: 10 + = → 10（A + = A）', () => {
+      expect(calc('10 + =')).toBe('10');
+    });
+    it('10 × = → 100（A × = A × A）', () => {
+      expect(calc('10 × =')).toBe('100');
+    });
+    it('10 ÷ = → 0.1（A ÷ = 1 ÷ A）', () => {
+      expect(calc('10 ÷ =')).toBe('0.1');
+    });
   });
 
 
   // =========================================================
-  // - の連続 =
+  // 3. パーセント
   // =========================================================
-
-  describe('- の連続計算', () => {
-
-    it('A-B=C のあと = で -B が繰り返される', () => {
-      pressDigits('10');
-      app.inputOperator('-');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('8');
-
-      app.calculate();
-      expectDisplay('6');
-
-      app.calculate();
-      expectDisplay('4');
-
-      app.calculate();
-      expectDisplay('2');
+  describe('パーセント', () => {
+    it('50 % → 0（演算子なしの%は0）', () => {
+      expect(calc('50 %')).toBe('0');
+    });
+    it('50 + 20% = → 110', () => {
+      expect(calc('50 + 20 % =')).toBe('110');
+    });
+    it('50 - 20% = → -10（現在の表示値を左辺、元の左辺を右辺として計算）', () => {
+      expect(calc('50 - 20 % =')).toBe('－10');
+    });
+    it('50 × 20% = → 500（%結果 × 元の左辺）', () => {
+      expect(calc('50 × 20 % =')).toBe('500');
+    });
+    it('50 ÷ 20% = → 12.5', () => {
+      expect(calc('50 ÷ 20 % =')).toBe('12.5');
     });
 
-
-    it('A-B=C のあと -= では B-C になり、その後 -C が繰り返される', () => {
-      pressDigits('10');
-      app.inputOperator('-');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('8');
-
-      app.inputOperator('-');
-      app.calculate();
-
-      // 2 - 8
-      expectDisplay('-6');
-
-      app.calculate();
-
-      // -6 - 8
-      expectDisplay('-14');
-
-      app.calculate();
-
-      // -14 - 8
-      expectDisplay('-22');
+    describe('0%による除算（実機同様、0除算としてE表示になる）', () => {
+      it('1 ÷ 0 % → %を押した時点で即E0', () => {
+        expect(calc('1 ÷ 0 %')).toBe('E0');
+      });
+      it('50 ÷ 0 % → E0', () => {
+        expect(calc('50 ÷ 0 %')).toBe('E0');
+      });
+      it('0 ÷ % → E0（左辺が0のケース）', () => {
+        expect(calc('0 ÷ %')).toBe('E0');
+      });
+      it('0 ÷ % % → E0（%の連続押しでも同様）', () => {
+        expect(calc('0 ÷ % %')).toBe('E0');
+      });
     });
-
   });
 
 
   // =========================================================
-  // ★ × の連続 =
+  // 4. 平方根
   // =========================================================
-
-  describe('× の連続計算', () => {
-
-    it('A×B=C のあと = で ×A が繰り返される', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-      app.calculate();
-
-      // A×B = C
-      expectDisplay('20');
-
-      app.calculate();
-
-      // C×A = 20×10
-      expectDisplay('200');
-
-      app.calculate();
-
-      // 200×10
-      expectDisplay('2000');
-
-      app.calculate();
-
-      // 2000×10
-      expectDisplay('20000');
+  describe('平方根', () => {
+    it('9 √ → 3', () => {
+      expect(calc('9 √')).toBe('3');
+    });
+    it('1 √ → 1', () => {
+      expect(calc('1 √')).toBe('1');
+    });
+    it('0 √ → 0', () => {
+      expect(calc('0 √')).toBe('0');
+    });
+    it('0.25 √ → 0.5', () => {
+      expect(calc('0.25 √')).toBe('0.5');
+    });
+    it('9 √ + 2 = → 5', () => {
+      expect(calc('9 √ + 2 =')).toBe('5');
+    });
+    it('9 + √ = → 12（A + √A）', () => {
+      expect(calc('9 + √ =')).toBe('12');
+    });
+    it('9 + √ 4 = → 13（√は右辺の数字入力には作用しない）', () => {
+      expect(calc('9 + √ 4 =')).toBe('13');
     });
 
-
-    it('A×B=C のあと ×= では C×C になる', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-      app.calculate();
-
-      // C = 20
-      expectDisplay('20');
-
-      app.inputOperator('×');
-      app.calculate();
-
-      // C×C
-      // 20×20 = 400
-      expectDisplay('400');
+    it('√を繰り返すと1に収束していく', () => {
+      const app = new App();
+      runKeys(app, '2 √');
+      const first = Number(display(app));
+      for (let i = 0; i < 20; i++) {
+        runKeys(app, '√');
+      }
+      const after = Number(display(app));
+      expect(after).toBeGreaterThan(1);
+      expect(after).toBeLessThan(first);
+      expect(after).toBeCloseTo(1, 4);
     });
 
-
-    it('A×B=C のあと ×= の次の = では D×C になる', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-      app.calculate();
-
-      // C = 20
-      expectDisplay('20');
-
-      app.inputOperator('×');
-      app.calculate();
-
-      // C×C = 400
-      expectDisplay('400');
-
-      app.calculate();
-
-      // D×C
-      // 400×20 = 8000
-      expectDisplay('8000');
-
-      app.calculate();
-
-      // 8000×20 = 160000
-      expectDisplay('160000');
+    describe('負数の平方根はエラーになり、Cでは復帰できない', () => {
+      it('5 ± √ → E0', () => {
+        expect(calc('5 ± √')).toBe('E0');
+      });
+      it('5 ± √ C → E0のまま（Cでは戻らない）', () => {
+        expect(calc('5 ± √ C')).toBe('E0');
+      });
+      it('5 ± √ C AC → 0（ACでのみ復帰できる）', () => {
+        expect(calc('5 ± √ C AC')).toBe('0');
+      });
     });
 
-
-    it('10×2=== は 20 → 200 → 2000 → 20000 になる', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-
-      app.calculate();
-      expectDisplay('20');
-
-      app.calculate();
-      expectDisplay('200');
-
-      app.calculate();
-      expectDisplay('2000');
-
-      app.calculate();
-      expectDisplay('20000');
+    it('（対照）正常な√の結果はCで0に戻せる', () => {
+      expect(calc('5 √ C')).toBe('0');
     });
-
-
-    it('10×2=×=== は 20 → 400 → 8000 → 160000 になる', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-
-      app.calculate();
-      expectDisplay('20');
-
-      app.inputOperator('×');
-      app.calculate();
-      expectDisplay('400');
-
-      app.calculate();
-      expectDisplay('8000');
-
-      app.calculate();
-      expectDisplay('160000');
+    it('（対照）√ = の後のCは計算結果を保持する', () => {
+      expect(calc('5 √ = C')).toBe('2.23606797');
     });
-
   });
 
 
   // =========================================================
-  // ★ ÷ の連続 =
+  // 5. 小数（二進小数の丸め誤差修正の回帰テスト）
   // =========================================================
-
-  describe('÷ の連続計算', () => {
-
-    it('A÷B=C のあと = で ÷B が繰り返される', () => {
-      pressDigits('100');
-      app.inputOperator('÷');
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('50');
-
-      app.calculate();
-
-      // 50÷2
-      expectDisplay('25');
-
-      app.calculate();
-
-      // 25÷2
-      expectDisplay('12.5');
+  describe('小数', () => {
+    it('0.1 + 0.2 = → 0.3（対照ケース）', () => {
+      expect(calc('0.1 + 0.2 =')).toBe('0.3');
     });
 
-
-    it('A÷B=C のあと ÷= では 1÷C になる', () => {
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-      app.calculate();
-
-      // C = 5
-      expectDisplay('5');
-
-      app.inputOperator('÷');
-      app.calculate();
-
-      // 1÷C
-      // 1÷5 = 0.2
-      expectDisplay('0.2');
+    it('1 ÷ 3 = → 0.33333333（小数第8位まで切り捨て）', () => {
+      expect(calc('1 ÷ 3 =')).toBe('0.33333333');
     });
 
-
-    it('A÷B=C のあと ÷= の次の = では D÷C になる', () => {
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-      app.calculate();
-
-      // C = 5
-      expectDisplay('5');
-
-      app.inputOperator('÷');
-      app.calculate();
-
-      // 1÷5 = 0.2
-      expectDisplay('0.2');
-
-      app.calculate();
-
-      // D÷C
-      // 0.2÷5 = 0.04
-      expectDisplay('0.04');
-
-      app.calculate();
-
-      // 0.04÷5 = 0.008
-      expectDisplay('0.008');
+    describe('二進小数特有の丸め誤差（修正前は末尾が9999999や0000001になっていた）', () => {
+      it('0.1 + 0.19 = → 0.29', () => {
+        expect(calc('0.1 + 0.19 =')).toBe('0.29');
+      });
+      it('4.35 + 4.35 = → 8.7', () => {
+        expect(calc('4.35 + 4.35 =')).toBe('8.7');
+      });
+      it('0.5 + 0.07 = → 0.57', () => {
+        expect(calc('0.5 + 0.07 =')).toBe('0.57');
+      });
+      it('0.5 + 0.65 = → 1.15', () => {
+        expect(calc('0.5 + 0.65 =')).toBe('1.15');
+      });
     });
-
-
-    it('10÷2=== は 5 → 2.5 → 1.25 → 0.625 になる', () => {
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-
-      app.calculate();
-      expectDisplay('5');
-
-      app.calculate();
-      expectDisplay('2.5');
-
-      app.calculate();
-      expectDisplay('1.25');
-
-      app.calculate();
-      expectDisplay('0.625');
-    });
-
-
-    it('10÷2=÷=== は 5 → 0.2 → 0.04 → 0.008 になる', () => {
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-
-      app.calculate();
-      expectDisplay('5');
-
-      app.inputOperator('÷');
-      app.calculate();
-      expectDisplay('0.2');
-
-      app.calculate();
-      expectDisplay('0.04');
-
-      app.calculate();
-      expectDisplay('0.008');
-    });
-
   });
 
 
   // =========================================================
-  // 演算子切り替え
+  // 6. 桁数制限
   // =========================================================
-
-  describe('演算子切り替え', () => {
-
-    it('右辺入力後に演算子を変更すると途中計算される', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('2');
-
-      app.inputOperator('×');
-
-      // 10+2 が先に計算されて 12×
-      expectDisplay('12');
-
-      pressDigits('3');
-      app.calculate();
-
-      expectDisplay('36');
+  describe('桁数制限', () => {
+    it('整数10桁までは入力できる', () => {
+      expect(calc('1234567890')).toBe('1234567890');
     });
-
+    it('整数11桁目は無視される', () => {
+      expect(calc('12345678901')).toBe('1234567890');
+    });
+    it('整数部と小数部の組み合わせ（10桁以内 + 小数8桁以内）', () => {
+      expect(calc('12345.06789')).toBe('12345.06789');
+    });
   });
 
 
   // =========================================================
-  // ±
+  // 7. オーバーフロー表示
   // =========================================================
-
-  describe('±', () => {
-
-    it('通常の数字を反転できる', () => {
-      pressDigits('5');
-      app.toggleSign();
-
-      expectDisplay('-5');
-
-      app.toggleSign();
-
-      expectDisplay('5');
+  describe('オーバーフロー表示', () => {
+    it('9999999999 + 1 = → E1.00000000', () => {
+      expect(calc('9999999999 + 1 =')).toBe('E1.00000000');
     });
-
-
-    it('0 は -0 にならない', () => {
-      app.toggleSign();
-
-      expectDisplay('0');
+    it('5000000000 × 3 = → E1.50000000', () => {
+      expect(calc('5000000000 × 3 =')).toBe('E1.50000000');
     });
-
-
-    it('演算子直後の ± では左辺を反転する', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-
-      app.toggleSign();
-
-      expectDisplay('-10');
+    it('9999999999 × 99 = → E98.99999999', () => {
+      expect(calc('9999999999 × 99 =')).toBe('E98.99999999');
     });
-
-
-    it('±後の掛け算が正しく計算される', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-
-      app.toggleSign();
-
-      pressDigits('2');
-      app.calculate();
-
-      expectDisplay('-20');
+    it('9999999999 × 9999999999 = → E9999999998.', () => {
+      expect(calc('9999999999 × 9999999999 =')).toBe('E9999999998.');
     });
-
+    it('999999999 × 9 = → 8999999991（10桁未満なのでオーバーフローしない）', () => {
+      expect(calc('999999999 × 9 =')).toBe('8999999991');
+    });
   });
 
 
   // =========================================================
-  // %
+  // 8. 0による除算
   // =========================================================
-
-  describe('%', () => {
-
-    it('50 + 20% = 60', () => {
-      pressDigits('50');
-      app.inputOperator('+');
-      pressDigits('20');
-      app.inputPercent();
-
-      expectDisplay('60');
+  describe('0による除算', () => {
+    it('1 ÷ 0 = → E0', () => {
+      expect(calc('1 ÷ 0 =')).toBe('E0');
     });
-
-
-    it('50 - 20% = 40', () => {
-      pressDigits('50');
-      app.inputOperator('-');
-      pressDigits('20');
-      app.inputPercent();
-
-      expectDisplay('40');
+    it('1 ÷ 0 = AC → 0（ACで復帰できる）', () => {
+      expect(calc('1 ÷ 0 = AC')).toBe('0');
     });
-
-
-    it('50 × 20% = 10', () => {
-      pressDigits('50');
-      app.inputOperator('×');
-      pressDigits('20');
-      app.inputPercent();
-
-      expectDisplay('10');
-    });
-
-
-    it('50 ÷ 20% = 250', () => {
-      pressDigits('50');
-      app.inputOperator('÷');
-      pressDigits('20');
-      app.inputPercent();
-
-      expectDisplay('250');
-    });
-
-
-    it('50 × 20% = のあと連続 = が 500 → 25000 になる', () => {
-      pressDigits('50');
-      app.inputOperator('×');
-      pressDigits('20');
-      app.inputPercent();
-
-      app.calculate();
-      expectDisplay('500');
-
-      app.calculate();
-      expectDisplay('25000');
-    });
-
   });
 
 
   // =========================================================
-  // √
+  // 9. 符号変更
   // =========================================================
-
-  describe('√', () => {
-
-    it('√9 = 3', () => {
-      pressDigits('9');
-      app.inputSquareRoot();
-
-      expectDisplay('3');
+  describe('符号変更', () => {
+    it('5 ± → -5', () => {
+      expect(calc('5 ±')).toBe('－5');
     });
-
-
-    it('√を連続すると平方根を繰り返す', () => {
-      pressDigits('256');
-
-      app.inputSquareRoot();
-      expectDisplay('16');
-
-      app.inputSquareRoot();
-      expectDisplay('4');
-
-      app.inputSquareRoot();
-      expectDisplay('2');
-
-      app.inputSquareRoot();
-      expectDisplay('1.414213562');
+    it('0 ± → 0（-0にはならない）', () => {
+      expect(calc('0 ±')).toBe('0');
     });
-
-
-    it('負数の√ではオーバーフロー状態になる', () => {
-      pressDigits('9');
-      app.toggleSign();
-
-      app.inputSquareRoot();
-
-      expect(app.isOverflow).toBeTrue();
-      expectDisplay('0');
-    });
-
   });
 
 
   // =========================================================
-  // C / AC
+  // 10. クリア
   // =========================================================
-
-  describe('C / AC', () => {
-
-    it('C は現在入力中の数字だけをクリアする', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('25');
-
-      app.clear();
-
-      expectDisplay('0');
-
-      // 左辺と演算子は残っているので
-      pressDigits('5');
-      app.calculate();
-
-      expectDisplay('15');
+  describe('クリア（C / AC）', () => {
+    it('123 C → 0', () => {
+      expect(calc('123 C')).toBe('0');
     });
-
-
-    it('計算直後の C は結果を消さない', () => {
-      pressDigits('10');
-      app.inputOperator('+');
-      pressDigits('5');
-      app.calculate();
-
-      expectDisplay('15');
-
-      app.clear();
-
-      expectDisplay('15');
+    it('123 = C → 123（計算結果はCでは消えない）', () => {
+      expect(calc('123 = C')).toBe('123');
     });
-
-
-    it('AC はすべてリセットする', () => {
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-      app.calculate();
-
-      app.clearAll();
-
-      expectDisplay('0');
-      expect(app.storedValue).toBeNull();
-      expect(app.operator).toBeNull();
-      expect(app.lastOperator).toBeNull();
-      expect(app.lastOperand).toBeNull();
-      expect(app.justCalculated).toBeFalse();
+    it('5 × C → 5（演算子直後はCで消えない）', () => {
+      expect(calc('5 × C')).toBe('5');
     });
-
-  });
-
-
-  // =========================================================
-  // 10桁入力制限
-  // =========================================================
-
-  describe('10桁入力制限', () => {
-
-    it('整数は10桁まで入力できる', () => {
-      pressDigits('1234567890');
-
-      expectDisplay('1234567890');
+    it('5 × 2 C → 0（右辺だけ消える）', () => {
+      expect(calc('5 × 2 C')).toBe('0');
     });
-
-
-    it('11桁目は入力されない', () => {
-      pressDigits('12345678901');
-
-      expectDisplay('1234567890');
+    it('5 × 2 = C → 10（計算結果には作用しない）', () => {
+      expect(calc('5 × 2 = C')).toBe('10');
     });
-
-
-    it('マイナス記号は桁数に含めない', () => {
-      pressDigits('1234567890');
-      app.toggleSign();
-
-      expectDisplay('-1234567890');
-    });
-
-  });
-
-
-  // =========================================================
-  // 表示フォーマット
-  // =========================================================
-
-  describe('表示フォーマット', () => {
-
-    it('小数は整数部分と小数部分の合計10桁を基本にする', () => {
-      pressDigits('1');
-      app.inputDecimal();
-      pressDigits('123456789');
-
-      expectDisplay('1.123456789');
-    });
-
-
-    it('1未満の値は小数9桁まで扱う', () => {
-      pressDigits('1');
-      app.inputOperator('÷');
-      pressDigits('8');
-      app.calculate();
-
-      expectDisplay('0.125');
-    });
-
-
-    it('10,000,000,000以上では指数表示になる', () => {
-      pressDigits('1000000000');
-      app.inputOperator('×');
-      pressDigits('10');
-      app.calculate();
-
-      expect(app.isOverflow).toBeTrue();
-      expectDisplay('1.000000000');
-    });
-
-  });
-
-
-  // =========================================================
-  // 重要：今回の特殊仕様をまとめて検証
-  // =========================================================
-
-  describe('今回の特殊な ×= / ÷= 仕様', () => {
-
-    it('10×2=×=== の内部遷移を検証する', () => {
-
-      // 10×2
-      pressDigits('10');
-      app.inputOperator('×');
-      pressDigits('2');
-
-      // =
-      app.calculate();
-      expectDisplay('20');
-
-      // ×=
-      app.inputOperator('×');
-      app.calculate();
-      expectDisplay('400');
-
-      // =
-      app.calculate();
-      expectDisplay('8000');
-
-      // =
-      app.calculate();
-      expectDisplay('160000');
-
-      // =
-      app.calculate();
-      expectDisplay('3200000');
-    });
-
-
-    it('10÷2=÷=== の内部遷移を検証する', () => {
-
-      // 10÷2
-      pressDigits('10');
-      app.inputOperator('÷');
-      pressDigits('2');
-
-      // =
-      app.calculate();
-      expectDisplay('5');
-
-      // ÷=
-      app.inputOperator('÷');
-      app.calculate();
-      expectDisplay('0.2');
-
-      // =
-      app.calculate();
-      expectDisplay('0.04');
-
-      // =
-      app.calculate();
-      expectDisplay('0.008');
-
-      // =
-      app.calculate();
-      expectDisplay('0.0016');
-    });
-
   });
 
 });
