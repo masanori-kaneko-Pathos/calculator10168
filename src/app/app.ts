@@ -538,7 +538,7 @@ export class App {
     // =======================================================
     // =======================================================
 
-     // -------------------------------------------------------
+    // -------------------------------------------------------
     // +/-
     //
     // 50 +/- %
@@ -546,14 +546,14 @@ export class App {
     // -------------------------------------------------------
     if (this.operator === '+' || this.operator === '-') {
       this.currentValue = this.formatNumber(base);
-      return; 
+      return;
     }
 
 
     this.percentOperand = null;
     this.percentBase = base;
     this.percentMode = true;
-   
+
 
     // -------------------------------------------------------
     // ×
@@ -561,7 +561,7 @@ export class App {
     // 50 × %
     // → 25
     // -------------------------------------------------------
-     if (this.operator === '×') {
+    if (this.operator === '×') {
 
       const result =
         base * (base / 100);
@@ -950,7 +950,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
-        this.calculatedByEqual = true; 
+        this.calculatedByEqual = true;
 
         this.clearPercentState();
 
@@ -1195,18 +1195,14 @@ export class App {
     // ① 1未満の小数の場合（例：0.666666666...）
     // ---------------------------------------------------------
     if (absValue < 1) {
-      // 8桁で「切り捨て」を行う
-      const factor = 100_000_000;
-      const truncated = Math.trunc(safeValue * factor) / factor;
+      // 8桁で「切り捨て」を行う（文字列ベース。掛け算誤差の影響を受けない）
+      const truncatedStr = this.truncateDecimalString(safeValue, 8);
 
-      if (truncated === 0) {
+      if (Number(truncatedStr) === 0) {
         return '0';
       }
 
-      return truncated
-        .toFixed(8)
-        .replace(/0+$/, '')
-        .replace(/\.$/, '');
+      return truncatedStr;
     }
 
     // ---------------------------------------------------------
@@ -1216,15 +1212,53 @@ export class App {
     // 整数部を除いた、小数に使える残り桁数を計算（合計10桁）
     const decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
 
-    // 残り桁数に合わせて「切り捨て」を行う
-    const factor = Math.pow(10, decimalDigits);
-    const truncated = Math.trunc(safeValue * factor) / factor;
+    // 残り桁数に合わせて「切り捨て」を行う（文字列ベース。掛け算誤差の影響を受けない）
+    const truncatedStr = this.truncateDecimalString(safeValue, decimalDigits);
 
-    if (Math.abs(truncated) >= 10_000_000_000) {
+    if (Math.abs(Number(truncatedStr)) >= 10_000_000_000) {
       return this.formatOverflow(safeValue);
     }
 
-    return truncated.toString();
+    return truncatedStr;
+  }
+
+
+  // =========================================================
+  // 掛け算・割り算を一切挟まずに
+  // 文字列の桁を数えて切り捨てることで、
+  // 二進小数特有の誤差（0.29 × 1e8 = 28999999.999999996 など）
+  // を計算に持ち込まないようにする。
+  // =========================================================
+
+  private truncateDecimalString(value: number, decimals: number): string {
+
+    const isNegative = value < 0;
+    const absValue = Math.abs(value);
+
+    // toString()は極端に小さい値だと指数表記（例: "1.234567e-7"）になるため、
+    // その場合だけ toFixed で通常の小数表記に変換する
+    let str = absValue.toString();
+
+    if (str.includes('e') || str.includes('E')) {
+      str = absValue.toFixed(20);
+    }
+
+    const dotIndex = str.indexOf('.');
+
+    const intPart = dotIndex === -1 ? str : str.slice(0, dotIndex);
+    const fracPart = dotIndex === -1 ? '' : str.slice(dotIndex + 1);
+
+    // 小数部を指定桁数で切り捨てる（四捨五入はしない）
+    const truncatedFrac = fracPart.slice(0, decimals);
+
+    const result =
+      truncatedFrac.length > 0
+        ? `${intPart}.${truncatedFrac}`
+        : intPart;
+
+    return isNegative && Number(result) !== 0
+      ? `-${result}`
+      : result;
   }
 
 
@@ -1286,6 +1320,13 @@ export class App {
   get displayNumber(): string {
     return this.currentValue.replace(/^-/, '');
   }
-  
+
+  get displayOperator(): string {
+    if (this.percentMode) {
+      return '';
+    }
+    return this.operator ?? '';
+  }
+
 
 }
