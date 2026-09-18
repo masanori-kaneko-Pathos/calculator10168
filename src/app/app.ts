@@ -957,14 +957,20 @@ export class App {
       ) {
         const rightValue = this.storedValue;
         const currentOperator = this.operator;
+        let implicitLeftValue = 0;
+        if (currentOperator === '×') {
+          implicitLeftValue = rightValue; // 10 × = は 10 × 10 にする
+        } else if (currentOperator === '÷') {
+          implicitLeftValue = 1;          // 10 ÷ = は 1 ÷ 10 にする
+        }
+
         const result = this.calculateResult(
-          0,
+          implicitLeftValue,
           rightValue,
           currentOperator
         );
 
-        this.currentValue =
-          this.formatNumber(result);
+        this.currentValue = this.formatNumber(result);
         this.lastOperator = currentOperator;
         this.lastOperand = rightValue;
 
@@ -972,6 +978,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
+        this.calculatedByEqual = true; // ←Cボタン用フラグも一応忘れずに
 
         this.clearPercentState();
 
@@ -986,6 +993,8 @@ export class App {
       this.operator === null ||
       this.storedValue === null
     ) {
+      this.justCalculated = true;
+      this.calculatedByEqual = true;
       return;
     }
 
@@ -1129,6 +1138,7 @@ export class App {
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
     this.waitingForOperand = false;
+    this.justCalculated = false;
     this.isOverflow = false;
     this.clearPercentState();
 
@@ -1213,7 +1223,7 @@ export class App {
     // ① 1未満の小数の場合（例：0.666666666...）
     // ---------------------------------------------------------
     if (absValue < 1) {
-      // 9桁で「切り捨て」を行う
+      // 8桁で「切り捨て」を行う
       const factor = 100_000_000;
       const truncated = Math.trunc(safeValue * factor) / factor;
 
@@ -1222,7 +1232,7 @@ export class App {
       }
 
       return truncated
-        .toFixed(9)
+        .toFixed(8)
         .replace(/0+$/, '')
         .replace(/\.$/, '');
     }
