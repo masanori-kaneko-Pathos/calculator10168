@@ -548,11 +548,7 @@ export class App {
     // =======================================================
     // =======================================================
 
-    this.percentOperand = null;
-    this.percentBase = base;
-    this.percentMode = true;
-
-    // -------------------------------------------------------
+     // -------------------------------------------------------
     // +/-
     //
     // 50 +/- %
@@ -563,13 +559,19 @@ export class App {
       return; 
     }
 
+
+    this.percentOperand = null;
+    this.percentBase = base;
+    this.percentMode = true;
+   
+
     // -------------------------------------------------------
     // ×
     //
     // 50 × %
     // → 25
     // -------------------------------------------------------
-    else if (this.operator === '×') {
+     if (this.operator === '×') {
 
       const result =
         base * (base / 100);
