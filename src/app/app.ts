@@ -417,11 +417,6 @@ export class App {
       const divisor =
         this.percentBase;
 
-      // 0% は除数 0 になるため計算しない
-      if (divisor === 0) {
-        return;
-      }
-
       const result =
         Number(this.currentValue) * (100 / divisor);
 
@@ -514,11 +509,6 @@ export class App {
         const divisor =
           currentNumber / 100;
 
-        // 0% は除数0なので計算しない
-        if (divisor === 0) {
-          return;
-        }
-
         const result =
           base / divisor;
 
@@ -595,10 +585,6 @@ export class App {
     // -------------------------------------------------------
     else if (this.operator === '÷') {
 
-      if (base === 0) {
-        return;
-      }
-
       const result =
         100 / base;
 
@@ -632,6 +618,7 @@ export class App {
       this.waitingForOperand = false;
       this.justCalculated = true;
       this.resetRepeatState();
+      this.calculatedByEqual = true;
       return;
     }
 
@@ -817,7 +804,7 @@ export class App {
             ? this.percentOperand
             : this.percentBase;
 
-        if (divisor === null || divisor === 0) {
+        if (divisor === null) {
           return;
         }
 
@@ -1284,8 +1271,9 @@ export class App {
       : mantissaText;
   }
   // =========================================================
-  // ディスプレイ左端の記号
+  // ディスプレイの記号
   // =========================================================
+
 
   get displayPrefix(): string {
     return this.currentValue.startsWith('-') ? '－' : '';
@@ -1298,5 +1286,6 @@ export class App {
   get displayNumber(): string {
     return this.currentValue.replace(/^-/, '');
   }
+  
 
 }
