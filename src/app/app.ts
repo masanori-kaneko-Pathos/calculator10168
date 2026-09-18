@@ -553,27 +553,14 @@ export class App {
     this.percentMode = true;
 
     // -------------------------------------------------------
-    // +
+    // +/-
     //
-    // 50 + %
-    // → 50
+    // 50 +/- %
+    // → 50 +/- のまま
     // -------------------------------------------------------
-    if (this.operator === '+') {
-
-      this.currentValue =
-        this.formatNumber(base);
-    }
-
-    // -------------------------------------------------------
-    // -
-    //
-    // 50 - %
-    // → 50
-    // -------------------------------------------------------
-    else if (this.operator === '-') {
-
-      this.currentValue =
-        this.formatNumber(base);
+    if (this.operator === '+' || this.operator === '-') {
+      this.currentValue = this.formatNumber(base);
+      return; 
     }
 
     // -------------------------------------------------------
