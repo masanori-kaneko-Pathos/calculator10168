@@ -1232,14 +1232,15 @@ export class App {
     // 整数部分 + 小数部分 = 10桁
     let decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
 
-    const factor = Math.pow(10, decimalDigits);
-    const truncated =
-      Math.trunc(mantissa * factor) / factor;
+    // 掛け算を使わず文字列で切り捨てる（formatNumber と同じ方式）
+    const truncated = this.truncateDecimalString(mantissa, decimalDigits);
+    const [intText, fracText = ''] = truncated.split('.');
 
+    // 表示は常に小数部を桁数ぶん0埋めする（E1.00000000）
     const mantissaText =
       decimalDigits === 0
-        ? `${truncated.toString()}.`
-        : truncated.toFixed(decimalDigits);
+        ? `${intText}.`
+        : `${intText}.${fracText.padEnd(decimalDigits, '0')}`;
 
 
     return isNegative
