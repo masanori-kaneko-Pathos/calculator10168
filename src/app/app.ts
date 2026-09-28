@@ -18,6 +18,9 @@ export class App {
   // 現在ディスプレイに表示している値
   currentValue = '0';
 
+  // オーバーフロー表示
+  isOverflow = false;
+
   // 演算子を押す前に保存しておく左辺
   storedValue: number | null = null;
 
@@ -101,7 +104,6 @@ export class App {
 
       this.justCalculated = false;
       this.waitingForOperand = false;
-
       this.calculatedByEqual = false;
       this.isOverflow = false;
 
@@ -210,7 +212,6 @@ export class App {
 
       this.justCalculated = false;
       this.waitingForOperand = false;
-
       this.calculatedByEqual = false;
 
       return;
@@ -326,9 +327,9 @@ export class App {
     // ---------------------------------------------------------
 
     if (
-      this.operator !== null &&
-      this.storedValue !== null &&
-      !this.waitingForOperand
+      this.operator !== null &&  // 演算子が入力されていて
+      this.storedValue !== null &&  // かつ右辺もあって
+      !this.waitingForOperand  //  演算子待ちではないなら
     ) {
       const result = this.calculateResult(
         this.storedValue,
@@ -365,6 +366,7 @@ export class App {
     }
 
     const currentNumber = Number(this.currentValue);
+    let finalResult = 0;
 
     // =======================================================
     // + / - で % を一度計算した後の % は無視
@@ -401,8 +403,6 @@ export class App {
       return;
     }
 
-    const base = this.storedValue;
-
     // =======================================================
     // すでに % を押している場合
     // =======================================================
@@ -429,115 +429,15 @@ export class App {
       return;
     }
 
-    // =======================================================
-    // =======================================================
-    // 右辺が存在する場合
-    //
-    // 例:
-    //
-    // 50 + 20 %
-    // 50 - 20 %
-    // 50 × 20 %
-    // 50 ÷ 20 %
-    // =======================================================
-    // =======================================================
-
-    if (!this.waitingForOperand) {
-
-      // %を押した時点の右辺
-      this.percentOperand = currentNumber;
-
-      // %を押した時点の左辺
-      this.percentBase = base;
-
-      // -------------------------------------------------------
-      // +
-      //
-      // 50 + 20 %
-      // → 60
-      // -------------------------------------------------------
-      if (this.operator === '+') {
-
-        const result =
-          base + (base * currentNumber / 100);
-
-        this.currentValue =
-          this.formatNumber(result);
-      }
-
-      // -------------------------------------------------------
-      // -
-      // 50 - 20 %
-      // → 40
-      // -------------------------------------------------------
-      else if (this.operator === '-') {
-
-        const result =
-          base - (base * currentNumber / 100);
-
-        this.currentValue =
-          this.formatNumber(result);
-      }
-
-      // -------------------------------------------------------
-      // ×
-      //
-      // 50 × 20 %
-      // → 10
-      // -------------------------------------------------------
-      else if (this.operator === '×') {
-
-        const result =
-          base * (currentNumber / 100);
-
-        this.currentValue =
-          this.formatNumber(result);
-      }
-
-      // -------------------------------------------------------
-      // ÷
-      //
-      // 50 ÷ 20 %
-      //
-      // 20% = 0.2
-      //
-      // 50 ÷ 0.2
-      // = 250
-      // -------------------------------------------------------
-      else if (this.operator === '÷') {
-
-        const divisor =
-          currentNumber / 100;
-
-        const result =
-          base / divisor;
-
-        this.currentValue =
-          this.formatNumber(result);
-      }
-
-      // %を押した状態として記録
-      this.percentMode = true;
-
-      this.waitingForOperand = false;
-      this.justCalculated = false;
-
-      return;
-    }
+    
+    const base = this.storedValue;
 
     // =======================================================
     // =======================================================
     // 右辺が存在しない場合
-    //
-    // 例:
-    //
-    // 50 + %
-    // 50 - %
-    // 50 × %
-    // 50 ÷ %
     // =======================================================
     // =======================================================
-
+    if (this.waitingForOperand) {
     // -------------------------------------------------------
     // +/-
     //
@@ -548,7 +448,6 @@ export class App {
       this.currentValue = this.formatNumber(base);
       return;
     }
-
 
     this.percentOperand = null;
     this.percentBase = base;
@@ -563,11 +462,8 @@ export class App {
     // -------------------------------------------------------
     if (this.operator === '×') {
 
-      const result =
-        base * (base / 100);
+      finalResult = base * (base / 100);
 
-      this.currentValue =
-        this.formatNumber(result);
     }
 
     // -------------------------------------------------------
@@ -575,25 +471,77 @@ export class App {
     //
     // 50 ÷ %
     // → 2
-    //
-    // 今回の仕様では
-    //
-    // 100 ÷ 50
-    // = 2
-    //
-    // とする。
     // -------------------------------------------------------
     else if (this.operator === '÷') {
 
-      const result =
-        100 / base;
+      finalResult = 100/base ;
 
-      this.currentValue =
-        this.formatNumber(result);
+    }
+  }
+
+    // =======================================================
+    // =======================================================
+    // 右辺が存在する場合
+    // =======================================================
+    // =======================================================
+
+   else {
+      // %を押した時点の右辺
+      this.percentOperand = currentNumber;
+
+      // %を押した時点の左辺
+      this.percentBase = base;
+
+
+      // -------------------------------------------------------
+      // +
+      //
+      // 50 + 20 %
+      // → 60
+      // -------------------------------------------------------
+      if (this.operator === '+') {
+        finalResult = base + (base * currentNumber / 100);
+      }
+      // -------------------------------------------------------
+      // -
+      // 50 - 20 %
+      // → 40
+      // -------------------------------------------------------
+      else if (this.operator === '-') {
+        finalResult = base - (base * currentNumber / 100);
+      }
+
+      // -------------------------------------------------------
+      // ×
+      //
+      // 50 × 20 %
+      // → 10
+      // -------------------------------------------------------
+      else if (this.operator === '×') {
+        finalResult = base * (currentNumber / 100);
+      }
+
+      // -------------------------------------------------------
+      // ÷
+      //
+      // 50 ÷ 20 %
+      // 50 ÷ 0.2
+      // = 250
+      // -------------------------------------------------------
+      else if (this.operator === '÷') {
+        finalResult = base / (currentNumber / 100);
+      }
+
+
+    
     }
 
+      // %を押した状態として記録
+    this.percentMode = true;
     this.waitingForOperand = false;
     this.justCalculated = false;
+
+    this.currentValue = this.formatNumber(finalResult);
   }
 
 
@@ -1161,13 +1109,6 @@ export class App {
     this.calculatedByEqual = false;
     this.clearPercentState();
   }
-
-  // =========================================================
-  // オーバーフロー表示
-  // =========================================================
-
-  isOverflow = false;
-
 
   // =========================================================
   // 表示用数値整形
