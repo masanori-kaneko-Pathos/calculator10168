@@ -76,12 +76,6 @@ export class App {
   // %を押したときの右辺 B
   percentOperand: number | null = null;
 
-  // =========================================================
-  // × の連続 = 特殊処理用フラグ
-  // =========================================================
-  leftSignChanged: boolean = false;
-  multiplySignChanged: boolean = false;
-
 
   // =========================================================
   // 数字入力
@@ -268,7 +262,7 @@ export class App {
     // 計算直後に演算子を押した場合
     // ---------------------------------------------------------
 
-    if (this.justCalculated) {
+    if (this.justCalculated && this.operator === null) {
       if (nextOperator === '×') {
 
         // C × ?
@@ -309,6 +303,7 @@ export class App {
     if (this.percentMode) {
       // %で表示されている値を、そのまま新しい左辺にする
       this.storedValue = currentNumber;
+      this.previousRightOperand = null;
       this.operator = nextOperator;
       this.waitingForOperand = true;
       this.justCalculated = false;
@@ -347,6 +342,18 @@ export class App {
 
       // 最初の演算子
       this.storedValue = currentNumber;
+
+      // 演算子の付け替え（5 + ×）ではなく新しい計算の開始なら、
+      // 前の計算の右辺は引き継がない
+      if (!this.waitingForOperand) {
+        this.previousRightOperand = null;
+      }else {
+        // + や - は直前の右辺を維持するが、× や ÷ に付け替えた場合はリセットする
+        if (nextOperator === '×' || nextOperator === '÷') {
+          this.previousRightOperand = null;
+        }
+      }
+
     }
 
 
@@ -573,30 +580,9 @@ export class App {
     const result = Math.sqrt(value);
 
     // 表示用に整形
-    const formatted = this.formatNumber(result);
+    this.currentValue = this.formatNumber(result);
 
-    // ---------------------------------------------------------
-    // √を繰り返したときの「1.00000001問題」対策
-    // ---------------------------------------------------------
-    //
-    // 1より少し大きい値になってしまった場合、
-    // 電卓としては1に収束したとみなす。
-    //
-    // 例:
-    // 1.00000001
-    // ↓ √
-    // 1.000000005
-    //
-    // 以降 √ を押しても 1 のまま
-    //
-    if (
-      formatted === this.currentValue &&
-      Math.abs(value - 1) < 0.000000001
-    ) {
-      this.currentValue = '1';
-    } else {
-      this.currentValue = formatted;
-    }
+
 
     this.waitingForOperand = false;
     this.justCalculated = true;
@@ -947,9 +933,6 @@ export class App {
     this.waitingForOperand = false;
     this.justCalculated = true;
     this.calculatedByEqual = true;
-    // 次の新しい計算のためにフラグをリセット
-    this.leftSignChanged = false;
-    this.multiplySignChanged = false;
 
     this.clearPercentState();
   }
@@ -1105,8 +1088,6 @@ export class App {
     this.lastOperator = null;
     this.lastOperand = null;
     this.previousRightOperand = null;
-    this.leftSignChanged = false;
-    this.multiplySignChanged = false;
     this.calculatedByEqual = false;
     this.clearPercentState();
   }
