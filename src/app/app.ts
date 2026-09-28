@@ -1191,7 +1191,7 @@ export class App {
     const fracPart = dotIndex === -1 ? '' : str.slice(dotIndex + 1);
 
     // 小数部を指定桁数で切り捨てる（四捨五入はしない）
-    const truncatedFrac = fracPart.slice(0, decimals);
+    const truncatedFrac = fracPart.slice(0, decimals).replace(/0+$/, '');
 
     const result =
       truncatedFrac.length > 0
