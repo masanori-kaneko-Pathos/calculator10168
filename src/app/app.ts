@@ -129,7 +129,7 @@ export class App {
     if (this.percentMode) {
 
       this.currentValue = digit;
-      
+      this.percentMode = false;
       this.isOverflow = false;
 
       return;
@@ -273,7 +273,7 @@ export class App {
       return;
     }
 
-    
+
 
     // ---------------------------------------------------------
     // 計算直後に演算子を押した場合
@@ -505,54 +505,66 @@ export class App {
     // =======================================================
 
     else {
-      // %を押した時点の右辺
-      this.percentOperand = currentNumber;
-      // %を押した時点の左辺
       this.percentBase = base;
-      const curPct = this.calculateResult(currentNumber, '100', '÷');
-      const delta = this.calculateResult(base, curPct, '×');
-      // -------------------------------------------------------
-      // +
-      //
-      // 50 + 20 %
-      // → 60
-      // -------------------------------------------------------
-      if (this.operator === '+') {
-        finalResult = this.calculateResult(base, delta, '+');
+
+      // ÷ は最初の percentOperand を保持
+      if (this.operator === '÷' && this.percentOperand !== null) {
+
+        const pct = this.calculateResult(
+          this.percentOperand,
+          '100',
+          '÷'
+        );
+
+        finalResult = this.calculateResult(
+          currentNumber,
+          pct,
+          '÷'
+        );
+
+      } else {
+
+        // + / - / × は今回の右辺を保存
+        this.percentOperand = currentNumber;
+
+        const curPct = this.calculateResult(
+          currentNumber,
+          '100',
+          '÷'
+        );
+
+        if (this.operator === '+' || this.operator === '-') {
+          const delta = this.calculateResult(
+            base,
+            curPct,
+            '×'
+          );
+
+          finalResult = this.calculateResult(
+            base,
+            delta,
+            this.operator
+          );
+
+        } else if (this.operator === '×') {
+          finalResult = this.calculateResult(
+            base,
+            curPct,
+            '×'
+          );
+        } else if (this.operator === '÷') {
+          // 1回目の ÷ %
+          finalResult = this.calculateResult(
+            base,
+            curPct,
+            '÷'
+          );
+        }
       }
-      // -------------------------------------------------------
-      // -
-      // 50 - 20 %
-      // → 40
-      // -------------------------------------------------------
-      else if (this.operator === '-') {
-        finalResult = this.calculateResult(base, delta, '-');
-      }
-
-      // -------------------------------------------------------
-      // ×
-      //
-      // 50 × 20 %
-      // → 10
-      // -------------------------------------------------------
-      else if (this.operator === '×') {
-        finalResult = this.calculateResult(base, curPct, '×');
-      }
-
-      // -------------------------------------------------------
-      // ÷
-      //
-      // 50 ÷ 20 %
-      // 50 ÷ 0.2
-      // = 250
-      // -------------------------------------------------------
-      else if (this.operator === '÷') {
-        finalResult = this.calculateResult(base, curPct, '÷');
-      }
-
-
-
     }
+
+
+
 
     // %を押した状態として記録
     this.percentMode = true;
