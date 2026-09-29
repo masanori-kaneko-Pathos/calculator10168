@@ -124,16 +124,11 @@ export class App {
 
     // ---------------------------------------------------------
     // %の直後に数字を入力した場合
-    //
-    // %で表示された値をそのまま編集するのではなく、
-    // 新しい数字入力として扱う。
     // ---------------------------------------------------------
 
     if (this.percentMode) {
 
       this.currentValue = digit;
-
-      this.clearPercentState();
       this.isOverflow = false;
 
       return;
@@ -476,7 +471,7 @@ export class App {
       // -------------------------------------------------------
       else if (this.operator === '÷') {
 
-        this.calculateResult('100', base, '÷');
+        finalResult = this.calculateResult('100', base, '÷');
 
       }
     }
@@ -696,8 +691,6 @@ export class App {
       // → 10 × 50 = 500
       // =
       // → 500 × 50 = 25000
-      //
-      // ここは今まで通り。
       // -------------------------------------------------------
       if (currentOperator === '×') {
 
@@ -961,7 +954,7 @@ export class App {
         break;
 
       case '×':
-        result = left * right;
+        result = (left * right) / SCALE;
         break;
 
       case '÷':
@@ -1100,6 +1093,7 @@ export class App {
 
     this.percentMode = false;
     this.percentBase = null;
+    this.percentOperand = null;
   }
 
 
