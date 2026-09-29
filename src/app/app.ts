@@ -129,6 +129,7 @@ export class App {
     if (this.percentMode) {
 
       this.currentValue = digit;
+      
       this.isOverflow = false;
 
       return;
@@ -251,7 +252,28 @@ export class App {
     }
 
     const currentNumber = this.currentValue;
+    // ---------------------------------------------------------
+    // √など、=以外の計算直後に演算子を押した場合
+    // ---------------------------------------------------------
 
+    if (this.justCalculated && !this.calculatedByEqual) {
+
+      // √の結果を新しい左辺として扱う
+      this.storedValue = currentNumber;
+
+      // 今押された演算子を新しい演算子にする
+      this.operator = nextOperator;
+
+      this.waitingForOperand = true;
+      this.justCalculated = false;
+      this.calculatedByEqual = false;
+
+      this.clearPercentState();
+
+      return;
+    }
+
+    
 
     // ---------------------------------------------------------
     // 計算直後に演算子を押した場合
@@ -959,9 +981,9 @@ export class App {
 
       case '÷':
 
-        if (right === 0n) 
+        if (right === 0n)
           return 'NaN';
-        
+
 
         result = (left * SCALE) / right;
         break;
@@ -1063,7 +1085,6 @@ export class App {
     this.isOverflow = false;
     this.clearPercentState();
 
-    // storedValue / operator / lastOperand は残す
   }
 
 
@@ -1115,8 +1136,8 @@ export class App {
   // =========================================================
 
   private formatNumber(valueStr: string): string {
-    if (valueStr === 'NaN' || 
-      valueStr === 'Infinity' || 
+    if (valueStr === 'NaN' ||
+      valueStr === 'Infinity' ||
       valueStr === '-Infinity') {
       this.isOverflow = true;
       return '0';
