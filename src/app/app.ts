@@ -1017,33 +1017,25 @@ export class App {
     if (this.isOverflow) {
       return;
     }
-    
+
     // =========================================================
     // 演算子直後の ±
     // → 演算子の左側にある数字を反転する
     // → + - × ÷ 共通
     // =========================================================
     if (this.waitingForOperand && this.operator !== null) {
-
       if (this.storedValue !== null && this.storedValue !== '0') {
-        this.storedValue = -this.storedValue;
+        this.storedValue = this.storedValue.startsWith('-')
+          ? this.storedValue.slice(1)
+          : '-' + this.storedValue;
 
-        // 表示も変更後の左辺にする
-        this.currentValue =
-          this.formatNumber(this.storedValue);
-
+        this.currentValue = this.formatNumber(this.storedValue);
       }
-
-      return;
-
-    }
-
-    // 0は -0 にしない
-    if (value === 0) {
       return;
     }
-    // 入力途中の「5.」や「1.50」を壊さないよう、
-    // 数値に戻さず先頭の「-」だけを付け外しする
+
+    if (this.currentValue === '0' || this.currentValue === '0.') return;
+
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
       : '-' + this.currentValue;
