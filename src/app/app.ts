@@ -1175,7 +1175,7 @@ export class App {
     const truncatedFrac = fracPart.slice(0, decimalDigits).replace(/0+$/, '');
     const result = truncatedFrac.length > 0 ? `${intPart}.${truncatedFrac}` : intPart;
 
-    return isNegative ? `-${result}` : result;
+    return isNegative && result !== '0' ? `-${result}` : result;
   }
 
 
