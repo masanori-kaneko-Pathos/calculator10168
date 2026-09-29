@@ -1051,7 +1051,7 @@ export class App {
     // → + - × ÷ 共通
     // =========================================================
     if (this.waitingForOperand && this.operator !== null) {
-      if (this.storedValue !== null && this.storedValue !== '0') {
+      if (this.storedValue !== null) {
         this.storedValue = this.storedValue.startsWith('-')
           ? this.storedValue.slice(1)
           : '-' + this.storedValue;
@@ -1061,7 +1061,6 @@ export class App {
       return;
     }
 
-    if (this.currentValue === '0' || this.currentValue === '0.') return;
 
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
@@ -1176,7 +1175,7 @@ export class App {
     const truncatedFrac = fracPart.slice(0, decimalDigits).replace(/0+$/, '');
     const result = truncatedFrac.length > 0 ? `${intPart}.${truncatedFrac}` : intPart;
 
-    return isNegative && result !== '0' ? `-${result}` : result;
+    return isNegative ? `-${result}` : result;
   }
 
 
