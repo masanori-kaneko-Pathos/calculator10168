@@ -22,7 +22,7 @@ export class App {
   isOverflow = false;
 
   // 演算子を押す前に保存しておく左辺
-  storedValue: number | null = null;
+  storedValue: string | null = null;
 
   // 現在選択されている演算子
   operator: Operator | null = null;
@@ -49,7 +49,7 @@ export class App {
   // 3 + 3 → 6
   // その後 - を押した場合
   // previousRightOperand = 3
-  previousRightOperand: number | null = null;
+  previousRightOperand: string | null = null;
 
   // 連続「=」で繰り返し使用する値
   //
@@ -60,7 +60,7 @@ export class App {
   // = 38
   //
   // この場合は最終的に 12 が入る。
-  lastOperand: number | null = null;
+  lastOperand: string | null = null;
 
 
   // =========================================================
@@ -71,10 +71,10 @@ export class App {
   percentMode = false;
 
   // %を押す直前の左辺 A
-  percentBase: number | null = null;
+  percentBase: string | null = null;
 
   // %を押したときの右辺 B
-  percentOperand: number | null = null;
+  percentOperand: string | null = null;
 
 
   // =========================================================
@@ -255,7 +255,7 @@ export class App {
       return;
     }
 
-    const currentNumber = Number(this.currentValue);
+    const currentNumber = this.currentValue;
 
 
     // ---------------------------------------------------------
@@ -273,7 +273,7 @@ export class App {
 
         // C ÷ ?
         // 「=」で 1 を右辺に入れる
-        this.previousRightOperand = 1;
+        this.previousRightOperand = '1';
 
       } else {
 
@@ -347,7 +347,7 @@ export class App {
       // 前の計算の右辺は引き継がない
       if (!this.waitingForOperand) {
         this.previousRightOperand = null;
-      }else {
+      } else {
         // + や - は直前の右辺を維持するが、× や ÷ に付け替えた場合はリセットする
         if (nextOperator === '×' || nextOperator === '÷') {
           this.previousRightOperand = null;
@@ -372,8 +372,8 @@ export class App {
       return;
     }
 
-    const currentNumber = Number(this.currentValue);
-    let finalResult = 0;
+    const currentNumber = this.currentValue;
+    let finalResult = '0';
 
     // =======================================================
     // + / - で % を一度計算した後の % は無視
@@ -406,7 +406,6 @@ export class App {
       this.justCalculated = true;
       this.waitingForOperand = false;
       this.resetRepeatState();
-
       return;
     }
 
@@ -424,15 +423,12 @@ export class App {
       const divisor =
         this.percentBase;
 
-      const result =
-        Number(this.currentValue) * (100 / divisor);
+      const pct = this.calculateResult('100', divisor, '÷');
+      const result = this.calculateResult(this.currentValue, pct, '×');
 
-      this.currentValue =
-        this.formatNumber(result);
-
+      this.currentValue = this.formatNumber(result);
       this.waitingForOperand = false;
       this.justCalculated = false;
-
       return;
     }
 
@@ -446,8 +442,6 @@ export class App {
     // =======================================================
     if (this.waitingForOperand) {
       // -------------------------------------------------------
-      // +/-
-      //
       // 50 +/- %
       // → 50 +/- のまま
       // -------------------------------------------------------
@@ -469,7 +463,8 @@ export class App {
       // -------------------------------------------------------
       if (this.operator === '×') {
 
-        finalResult = base * (base / 100);
+        const pct = this.calculateResult(base, '100', '÷');
+        finalResult = this.calculateResult(base, pct, '×');
 
       }
 
@@ -481,7 +476,7 @@ export class App {
       // -------------------------------------------------------
       else if (this.operator === '÷') {
 
-        finalResult = 100 / base;
+        this.calculateResult('100', base, '÷');
 
       }
     }
@@ -495,10 +490,10 @@ export class App {
     else {
       // %を押した時点の右辺
       this.percentOperand = currentNumber;
-
       // %を押した時点の左辺
       this.percentBase = base;
-
+      const curPct = this.calculateResult(currentNumber, '100', '÷');
+      const delta = this.calculateResult(base, curPct, '×');
       // -------------------------------------------------------
       // +
       //
@@ -506,7 +501,7 @@ export class App {
       // → 60
       // -------------------------------------------------------
       if (this.operator === '+') {
-        finalResult = base + (base * currentNumber / 100);
+        finalResult = this.calculateResult(base, delta, '+');
       }
       // -------------------------------------------------------
       // -
@@ -514,7 +509,7 @@ export class App {
       // → 40
       // -------------------------------------------------------
       else if (this.operator === '-') {
-        finalResult = base - (base * currentNumber / 100);
+        finalResult = this.calculateResult(base, delta, '-');
       }
 
       // -------------------------------------------------------
@@ -524,7 +519,7 @@ export class App {
       // → 10
       // -------------------------------------------------------
       else if (this.operator === '×') {
-        finalResult = base * (currentNumber / 100);
+        finalResult = this.calculateResult(base, curPct, '×');
       }
 
       // -------------------------------------------------------
@@ -535,7 +530,7 @@ export class App {
       // = 250
       // -------------------------------------------------------
       else if (this.operator === '÷') {
-        finalResult = base / (currentNumber / 100);
+        finalResult = this.calculateResult(base, curPct, '÷');
       }
 
 
@@ -577,10 +572,15 @@ export class App {
     }
 
     // 平方根を計算
-    const result = Math.sqrt(value);
+    const resultNum = Math.sqrt(value);
+    // e表記になるような極端な数字を文字列化で補正
+    let resultStr = resultNum.toString();
+    if (resultStr.includes('e')) {
+      resultStr = resultNum.toFixed(15).replace(/0+$/, '').replace(/\.$/, '');
+    }
 
     // 表示用に整形
-    this.currentValue = this.formatNumber(result);
+    this.currentValue = this.formatNumber(resultStr);
 
 
 
@@ -612,8 +612,7 @@ export class App {
       this.lastOperand !== null
     ) {
 
-      const currentNumber = Number(this.currentValue);
-
+      const currentNumber = this.currentValue;
       const result = this.calculateResult(
         currentNumber,
         this.lastOperand,
@@ -621,7 +620,6 @@ export class App {
       );
 
       this.currentValue = this.formatNumber(result);
-
       this.justCalculated = true;
       this.calculatedByEqual = true;
 
@@ -638,8 +636,7 @@ export class App {
       this.percentMode &&
       this.percentBase !== null
     ) {
-
-      const percentResult = Number(this.currentValue);
+      const percentResult = this.currentValue;
       const base = this.percentBase;
       const currentOperator = this.operator;
 
@@ -669,8 +666,7 @@ export class App {
         const result = this.calculateResult(
           percentResult,
           base,
-          currentOperator
-        );
+          currentOperator);
 
         this.currentValue =
           this.formatNumber(result);
@@ -834,6 +830,7 @@ export class App {
         this.operator = null;
         this.waitingForOperand = false;
         this.justCalculated = true;
+        this.calculatedByEqual = true;
 
         this.clearPercentState();
 
@@ -862,11 +859,11 @@ export class App {
       ) {
         const rightValue = this.storedValue;
         const currentOperator = this.operator;
-        let implicitLeftValue = 0;
+        let implicitLeftValue = '0';
         if (currentOperator === '×') {
           implicitLeftValue = rightValue; // 10 × = は 10 × 10 にする
         } else if (currentOperator === '÷') {
-          implicitLeftValue = 1;          // 10 ÷ = は 1 ÷ 10 にする
+          implicitLeftValue = '1';          // 10 ÷ = は 1 ÷ 10 にする
         }
 
         const result = this.calculateResult(
@@ -903,7 +900,7 @@ export class App {
       return;
     }
 
-    const currentNumber = Number(this.currentValue);
+    const currentNumber = this.currentValue;
     const currentOperator = this.operator;
     const leftValue = this.storedValue;
 
@@ -940,38 +937,75 @@ export class App {
 
 
   // =========================================================
-  // 四則演算
+  // 四則演算 （ BigIntを導入 ）
   // =========================================================
   private calculateResult(
-    left: number,
-    right: number,
-    operator: Operator
-  ): number {
+    leftStr: string,
+    rightStr: string,
+    operator: Operator):
+    string {
+    const left = this.toScaledBigInt(leftStr);
+    const right = this.toScaledBigInt(rightStr);
+    let result: bigint;
+
+    const SCALE = 10000000000000000n;
 
     switch (operator) {
 
       case '+':
-        return left + right;
+        result = left + right;
+        break;
 
       case '-':
-        return left - right;
+        result = left - right;
+        break;
 
       case '×':
-        return left * right;
+        result = left * right;
+        break;
 
       case '÷':
 
-        if (right === 0) {
-          return NaN;
-        }
+        if (right === 0n) 
+          return 'NaN';
+        
 
-        return left / right;
+        result = (left * SCALE) / right;
+        break;
 
       default:
         throw new Error(
           `Unknown operator: ${operator}`
         );
     }
+    return this.fromScaledBigInt(result);
+  }
+
+  // 文字列を 10^16 倍した BigInt に変換
+  private toScaledBigInt(str: string): bigint {
+    if (!str || str === 'NaN') return 0n;
+    const isNegative = str.startsWith('-');
+    const absStr = isNegative ? str.slice(1) : str;
+    const [intPart, fracPart = ''] = absStr.split('.');
+
+    // 小数部を16桁になるようにゼロ埋めして結合
+    const paddedFrac = fracPart.padEnd(16, '0').slice(0, 16);
+    const val = BigInt(intPart + paddedFrac);
+
+    return isNegative ? -val : val;
+  }
+
+  // 計算後の BigInt を小数点を正しい位置に戻して文字列化
+  private fromScaledBigInt(val: bigint): string {
+    const isNegative = val < 0n;
+    const absVal = isNegative ? -val : val;
+    let str = absVal.toString().padStart(17, '0');
+
+    const intPart = str.slice(0, -16) || '0';
+    const fracPart = str.slice(-16).replace(/0+$/, '');
+
+    const res = fracPart.length > 0 ? `${intPart}.${fracPart}` : intPart;
+    return isNegative && res !== '0' ? `-${res}` : res;
   }
 
 
@@ -983,9 +1017,7 @@ export class App {
     if (this.isOverflow) {
       return;
     }
-
-    const value = Number(this.currentValue);
-
+    
     // =========================================================
     // 演算子直後の ±
     // → 演算子の左側にある数字を反転する
@@ -993,7 +1025,7 @@ export class App {
     // =========================================================
     if (this.waitingForOperand && this.operator !== null) {
 
-      if (this.storedValue !== null && this.storedValue !== 0) {
+      if (this.storedValue !== null && this.storedValue !== '0') {
         this.storedValue = -this.storedValue;
 
         // 表示も変更後の左辺にする
@@ -1096,93 +1128,38 @@ export class App {
   // 表示用数値整形
   // =========================================================
 
-  private formatNumber(value: number): string {
-    if (!Number.isFinite(value)) {
+  private formatNumber(valueStr: string): string {
+    if (valueStr === 'NaN' || 
+      valueStr === 'Infinity' || 
+      valueStr === '-Infinity') {
       this.isOverflow = true;
       return '0';
     }
 
-    // JS特有の極小の計算誤差（0.1 + 0.2 = 0.30000000000000004など）を吸収するため、
-    // 一旦14桁程度の精度で綺麗に整える
-    const safeValue = Number(value.toPrecision(14));
+    const isNegative = valueStr.startsWith('-');
+    const absValue = isNegative ? valueStr.slice(1) : valueStr;
+    const [intPart, fracPart = ''] = absValue.split('.');
 
-    const absValue = Math.abs(safeValue);
-
-    if (absValue >= 10_000_000_000) {
-      return this.formatOverflow(safeValue);
+    if (intPart.length > 10) {
+      return this.formatOverflow(valueStr);
     }
 
     this.isOverflow = false;
 
-    // ---------------------------------------------------------
-    // ① 1未満の小数の場合（例：0.666666666...）
-    // ---------------------------------------------------------
-    if (absValue < 1) {
-      // 8桁で「切り捨て」を行う（文字列ベース。掛け算誤差の影響を受けない）
-      const truncatedStr = this.truncateDecimalString(safeValue, 8);
-
-      if (Number(truncatedStr) === 0) {
-        return '0';
-      }
-
-      return truncatedStr;
+    let decimalDigits = 0;
+    if (intPart === '0') {
+      decimalDigits = 8;
+    } else {
+      decimalDigits = Math.min(8, Math.max(0, 10 - intPart.length));
     }
 
-    // ---------------------------------------------------------
-    // ② 1以上の数値の場合（例：123.456...）
-    // ---------------------------------------------------------
-    const integerDigits = Math.floor(absValue).toString().length;
-    // 整数部を除いた、小数に使える残り桁数を計算（合計10桁）
-    const decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
+    // 文字列のまま切り捨て（丸め込みによる繰り上げを絶対に起こさせない）
+    const truncatedFrac = fracPart.slice(0, decimalDigits).replace(/0+$/, '');
+    const result = truncatedFrac.length > 0 ? `${intPart}.${truncatedFrac}` : intPart;
 
-    // 残り桁数に合わせて「切り捨て」を行う（文字列ベース。掛け算誤差の影響を受けない）
-    const truncatedStr = this.truncateDecimalString(safeValue, decimalDigits);
-
-    if (Math.abs(Number(truncatedStr)) >= 10_000_000_000) {
-      return this.formatOverflow(safeValue);
-    }
-
-    return truncatedStr;
+    return isNegative && result !== '0' ? `-${result}` : result;
   }
 
-
-  // =========================================================
-  // 掛け算・割り算を一切挟まずに
-  // 文字列の桁を数えて切り捨てることで、
-  // 二進小数特有の誤差（0.29 × 1e8 = 28999999.999999996 など）
-  // を計算に持ち込まないようにする。
-  // =========================================================
-
-  private truncateDecimalString(value: number, decimals: number): string {
-
-    const isNegative = value < 0;
-    const absValue = Math.abs(value);
-
-    // toString()は極端に小さい値だと指数表記（例: "1.234567e-7"）になるため、
-    // その場合だけ toFixed で通常の小数表記に変換する
-    let str = absValue.toString();
-
-    if (str.includes('e') || str.includes('E')) {
-      str = absValue.toFixed(20);
-    }
-
-    const dotIndex = str.indexOf('.');
-
-    const intPart = dotIndex === -1 ? str : str.slice(0, dotIndex);
-    const fracPart = dotIndex === -1 ? '' : str.slice(dotIndex + 1);
-
-    // 小数部を指定桁数で切り捨てる（四捨五入はしない）
-    const truncatedFrac = fracPart.slice(0, decimals).replace(/0+$/, '');
-
-    const result =
-      truncatedFrac.length > 0
-        ? `${intPart}.${truncatedFrac}`
-        : intPart;
-
-    return isNegative && Number(result) !== 0
-      ? `-${result}`
-      : result;
-  }
 
 
 
@@ -1198,30 +1175,30 @@ export class App {
   // E2.50000000
   // =========================================================
 
-  private formatOverflow(value: number): string {
+  private formatOverflow(valueStr: string): string {
     this.isOverflow = true;
 
-    const isNegative = value < 0;
-    const absValue = Math.abs(value);
+    const val = Number(valueStr);
+    const isNegative = val < 0;
+    const absVal = Math.abs(val);
 
     // 10^10 を基準にする
-    const mantissa = absValue / 10_000_000_000;
+    const mantissa = absVal / 10_000_000_000;
 
-    // 整数部分の桁数
-    let integerDigits = Math.floor(mantissa).toString().length;
+    let str = mantissa.toString();
+    if (str.includes('e') || str.includes('E')) {
+      str = mantissa.toFixed(20);
+    }
 
-    // 整数部分 + 小数部分 = 10桁
-    let decimalDigits = Math.min(8, Math.max(0, 10 - integerDigits));
-
-    // 掛け算を使わず文字列で切り捨てる（formatNumber と同じ方式）
-    const truncated = this.truncateDecimalString(mantissa, decimalDigits);
-    const [intText, fracText = ''] = truncated.split('.');
+    const [intPart, fracPart = ''] = str.split('.');
+    const decimalDigits = Math.min(8, Math.max(0, 10 - intPart.length));
+    const truncatedFrac = fracPart.slice(0, decimalDigits);
 
     // 表示は常に小数部を桁数ぶん0埋めする（E1.00000000）
     const mantissaText =
       decimalDigits === 0
-        ? `${intText}.`
-        : `${intText}.${fracText.padEnd(decimalDigits, '0')}`;
+        ? `${intPart}.`
+        : `${intPart}.${truncatedFrac.padEnd(decimalDigits, '0')}`;
 
 
     return isNegative
