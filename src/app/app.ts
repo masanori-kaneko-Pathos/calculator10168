@@ -623,9 +623,7 @@ export class App {
     this.waitingForOperand = false;
 
     // ％モードの魔法がかかっている最中は、PERCENTステートを維持する
-    if (!this.percentMode) {
-      this.calculationSource = 'SQRT';
-    }
+    this.calculationSource = 'SQRT';
 
   }
 
