@@ -90,6 +90,9 @@ export class App {
       return;
     }
 
+    if (this.calculationSource === 'PERCENT') { 
+      this.calculationSource = 'NONE';
+    }
 
     // ---------------------------------------------------------
     // √や=などの計算直後
@@ -248,56 +251,58 @@ export class App {
 
     if (this.operator === null) {
 
-     if (this.calculationSource === 'SQRT') {
-      // √の結果を新しい左辺として扱う
-      this.storedValue = currentNumber;
+      if (this.calculationSource === 'SQRT') {
+        // √の結果を新しい左辺として扱う
+        this.storedValue = currentNumber;
 
-      // 今押された演算子を新しい演算子にする
-      this.operator = nextOperator;
+        this.previousRightOperand = null;
 
-      this.waitingForOperand = true;
-      this.calculationSource = 'NONE';
-      return;
-    }
-    
+        // 今押された演算子を新しい演算子にする
+        this.operator = nextOperator;
 
-
-
-    // ---------------------------------------------------------
-    // 計算直後に演算子を押した場合
-    // ---------------------------------------------------------
-
-
-    if (this.calculationSource === 'EQUAL')  {
-      if (nextOperator === '×') {
-
-        // C × ?
-        // 「=」で C を右辺に入れる
-        this.previousRightOperand = currentNumber;
-
-      } else if (nextOperator === '÷') {
-
-        // C ÷ ?
-        // 「=」で 1 を右辺に入れる
-        this.previousRightOperand = '1';
-
-      } else {
-
-        // + / -
-        // 従来どおり、元の右辺を使う
-        this.previousRightOperand = this.lastOperand;
+        this.waitingForOperand = true;
+        this.calculationSource = 'NONE';
+        return;
       }
 
-      this.storedValue = currentNumber;
-      this.operator = nextOperator;
 
-      this.waitingForOperand = true;
-      this.calculationSource = 'NONE';
-      this.clearPercentState();
 
-      return;
+
+      // ---------------------------------------------------------
+      // 計算直後に演算子を押した場合
+      // ---------------------------------------------------------
+
+
+      if (this.calculationSource === 'EQUAL') {
+        if (nextOperator === '×') {
+
+          // C × ?
+          // 「=」で C を右辺に入れる
+          this.previousRightOperand = currentNumber;
+
+        } else if (nextOperator === '÷') {
+
+          // C ÷ ?
+          // 「=」で 1 を右辺に入れる
+          this.previousRightOperand = '1';
+
+        } else {
+
+          // + / -
+          // 従来どおり、元の右辺を使う
+          this.previousRightOperand = this.lastOperand;
+        }
+
+        this.storedValue = currentNumber;
+        this.operator = nextOperator;
+
+        this.waitingForOperand = true;
+        this.calculationSource = 'NONE';
+        this.clearPercentState();
+
+        return;
+      }
     }
-  }
 
 
     // ---------------------------------------------------------
@@ -364,7 +369,7 @@ export class App {
     this.operator = nextOperator;
     this.waitingForOperand = true;
   }
-  
+
 
   // =========================================================
   // %
@@ -572,10 +577,10 @@ export class App {
     }
 
     // 現在の値を取得
-    const value = Number(this.currentValue);
+    const valueStr = this.currentValue;
 
     // 負数の平方根
-    if (value < 0) {
+    if (valueStr.startsWith('-')) {
       this.currentValue = '0';
       this.isOverflow = true;
       this.calculationSource = 'SQRT';
@@ -585,24 +590,35 @@ export class App {
 
       return;
     }
-
-
-    // 平方根を計算
-    const resultNum = Math.sqrt(value);
-    // e表記になるような極端な数字を文字列化で補正
-    let resultStr = resultNum.toString();
-    if (resultStr.includes('e')) {
-      resultStr = resultNum.toFixed(15).replace(/0+$/, '').replace(/\.$/, '');
+    if (valueStr === '0') {
+      this.calculationSource = 'SQRT';
+      this.waitingForOperand = false;
+      return;
     }
+
+    const [intPart, fracPart = ''] = valueStr.split('.');
+    
+    // fromScaledBigInt(10^16スケール)で正しい位置に小数点を戻すためには、
+    // 計算前に「10^32倍」にしておく必要があります（ √10^32 = 10^16 になるため）
+    const paddedFrac = fracPart.padEnd(32, '0').slice(0, 32);
+    const bigVal = BigInt(intPart + paddedFrac);
+    
+    // ニュートン法でBigIntの平方根を計算
+    const resultBigInt = this.bigIntSqrt(bigVal);
+    
+    // 10^16スケールのBigIntとして文字列に戻す
+    const resultStr = this.fromScaledBigInt(resultBigInt);
 
     // 表示用に整形
     this.currentValue = this.formatNumber(resultStr);
 
-
-
     this.waitingForOperand = false;
-    this.calculationSource = 'SQRT';
     
+    // ％モードの魔法がかかっている最中は、PERCENTステートを維持する
+    if (!this.percentMode) {
+      this.calculationSource = 'SQRT';
+    }
+
   }
 
 
@@ -1013,6 +1029,20 @@ export class App {
     return isNegative && res !== '0' ? `-${res}` : res;
   }
 
+  // 整数平方根
+  private bigIntSqrt(n: bigint): bigint {
+    if (n < 0n) return 0n;
+    if (n === 0n) return 0n;
+
+    let x = n;
+    let y = (x + 1n) / 2n;
+    
+    while (y < x) {
+      x = y;
+      y = (x + n / x) / 2n;
+    }
+    return x;
+  }
 
   // =========================================================
   // ±
@@ -1030,19 +1060,21 @@ export class App {
     // =========================================================
     if (this.waitingForOperand && this.operator !== null) {
       if (this.storedValue !== null) {
+        const wasSame = this.operator === '×' && this.previousRightOperand === this.storedValue; // 反転前
         this.storedValue = this.storedValue.startsWith('-')
           ? this.storedValue.slice(1)
           : '-' + this.storedValue;
-
+          if (wasSame) this.previousRightOperand = this.storedValue; 
         this.currentValue = this.formatNumber(this.storedValue);
       }
       return;
     }
 
-
+    const wasSame = this.operator === '×' && this.previousRightOperand === this.storedValue; // 反転前
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
       : '-' + this.currentValue;
+      if (wasSame) this.previousRightOperand = this.storedValue; 
   }
 
   // =========================================================
@@ -1067,9 +1099,10 @@ export class App {
     }
 
     //%を用いた計算結果は消さない
-    if (this.percentMode) {
-      return;
-    }
+    if (this.percentMode 
+      && this.calculationSource === 'PERCENT') { 
+        return; 
+      }
 
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
