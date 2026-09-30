@@ -139,10 +139,12 @@ export class App {
 
 
     // ---------------------------------------------------------
-    // 0なら置き換え
+    // 0,-0なら置き換え
     // ---------------------------------------------------------
 
-    if (this.currentValue === '0') {
+    if (this.currentValue === '0'
+      || this.currentValue === '-0'
+    ) {
 
       this.currentValue = digit;
       this.isOverflow = false;
@@ -584,11 +586,6 @@ export class App {
       return;
     }
 
-    if (this.percentMode) {
-      this.storedValue = null;
-      this.operator = null;
-      this.previousRightOperand = null;
-    }
 
     // 平方根を計算
     const resultNum = Math.sqrt(value);
