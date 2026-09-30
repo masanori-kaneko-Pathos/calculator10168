@@ -90,7 +90,7 @@ export class App {
       return;
     }
 
-    if (this.calculationSource === 'PERCENT') { 
+    if (this.calculationSource === 'PERCENT') {
       this.calculationSource = 'NONE';
     }
 
@@ -255,8 +255,6 @@ export class App {
         // √の結果を新しい左辺として扱う
         this.storedValue = currentNumber;
 
-        this.previousRightOperand = null;
-
         // 今押された演算子を新しい演算子にする
         this.operator = nextOperator;
 
@@ -341,11 +339,21 @@ export class App {
         currentNumber,
         this.operator
       );
-      // 直前の計算で使った右辺を保存
-      this.previousRightOperand = currentNumber;
 
+      const resultStr = this.formatNumber(result);
+
+      if (nextOperator === '×') {
+        // 計算結果自体を次の右辺にする
+        this.previousRightOperand = resultStr;
+      } else if (nextOperator === '÷') {
+        // ÷の連続は右辺を1にする
+        this.previousRightOperand = '1';
+      } else {
+        // +と-はそのまま
+        this.previousRightOperand = currentNumber;
+      }
       // 計算結果を次の左辺に
-      this.currentValue = this.formatNumber(result);
+      this.currentValue = resultStr;
       this.storedValue = this.currentValue;
     } else {
 
@@ -422,7 +430,6 @@ export class App {
     // =======================================================
 
     if (
-      this.percentMode &&
       this.operator === '÷' &&
       this.percentBase !== null &&
       this.percentOperand === null
@@ -437,6 +444,7 @@ export class App {
       this.currentValue = this.formatNumber(result);
       this.waitingForOperand = false;
       this.calculationSource = 'PERCENT';
+      this.percentMode = true;
       return;
     }
 
@@ -597,15 +605,15 @@ export class App {
     }
 
     const [intPart, fracPart = ''] = valueStr.split('.');
-    
+
     // fromScaledBigInt(10^16スケール)で正しい位置に小数点を戻すためには、
     // 計算前に「10^32倍」にしておく必要があります（ √10^32 = 10^16 になるため）
     const paddedFrac = fracPart.padEnd(32, '0').slice(0, 32);
     const bigVal = BigInt(intPart + paddedFrac);
-    
+
     // ニュートン法でBigIntの平方根を計算
     const resultBigInt = this.bigIntSqrt(bigVal);
-    
+
     // 10^16スケールのBigIntとして文字列に戻す
     const resultStr = this.fromScaledBigInt(resultBigInt);
 
@@ -613,7 +621,7 @@ export class App {
     this.currentValue = this.formatNumber(resultStr);
 
     this.waitingForOperand = false;
-    
+
     // ％モードの魔法がかかっている最中は、PERCENTステートを維持する
     if (!this.percentMode) {
       this.calculationSource = 'SQRT';
@@ -1036,7 +1044,7 @@ export class App {
 
     let x = n;
     let y = (x + 1n) / 2n;
-    
+
     while (y < x) {
       x = y;
       y = (x + n / x) / 2n;
@@ -1064,7 +1072,7 @@ export class App {
         this.storedValue = this.storedValue.startsWith('-')
           ? this.storedValue.slice(1)
           : '-' + this.storedValue;
-          if (wasSame) this.previousRightOperand = this.storedValue; 
+        if (wasSame) this.previousRightOperand = this.storedValue;
         this.currentValue = this.formatNumber(this.storedValue);
       }
       return;
@@ -1074,7 +1082,7 @@ export class App {
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
       : '-' + this.currentValue;
-      if (wasSame) this.previousRightOperand = this.storedValue; 
+    if (wasSame) this.previousRightOperand = this.storedValue;
   }
 
   // =========================================================
@@ -1099,10 +1107,10 @@ export class App {
     }
 
     //%を用いた計算結果は消さない
-    if (this.percentMode 
-      && this.calculationSource === 'PERCENT') { 
-        return; 
-      }
+    if (this.percentMode
+      && this.calculationSource === 'PERCENT') {
+      return;
+    }
 
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
