@@ -256,7 +256,7 @@ export class App {
     // √など、=以外の計算直後に演算子を押した場合
     // ---------------------------------------------------------
 
-    if (this.justCalculated && !this.calculatedByEqual) {
+    if (this.justCalculated && !this.calculatedByEqual && this.operator === null) {
 
       // √の結果を新しい左辺として扱う
       this.storedValue = currentNumber;
