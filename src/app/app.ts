@@ -3,6 +3,12 @@ import { CommonModule } from '@angular/common';
 
 type Operator = '+' | '-' | '×' | '÷';
 
+type CalculationSource =
+  | 'NONE'
+  | 'EQUAL'
+  | 'SQRT'
+  | 'PERCENT';
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.html',
@@ -18,6 +24,9 @@ export class App {
   // 現在ディスプレイに表示している値
   currentValue = '0';
 
+  // 現在の計算結果が何によってもたらされたか
+  calculationSource: CalculationSource = 'NONE';
+
   // オーバーフロー表示
   isOverflow = false;
 
@@ -29,12 +38,6 @@ export class App {
 
   // 演算子を押した直後か
   waitingForOperand = false;
-
-  // 計算結果を表示した直後か
-  justCalculated = false;
-
-  // = で計算された直後かどうか
-  calculatedByEqual = false;
 
 
   // =========================================================
@@ -92,15 +95,14 @@ export class App {
     // √や=などの計算直後
     // ---------------------------------------------------------
 
-    if (this.justCalculated) {
-
+    if (
+      this.calculationSource === 'SQRT' ||
+      this.calculationSource === 'EQUAL'
+    ) {
       this.currentValue = digit;
-
-      this.justCalculated = false;
       this.waitingForOperand = false;
-      this.calculatedByEqual = false;
       this.isOverflow = false;
-
+      this.calculationSource = 'NONE';
       return;
     }
 
@@ -194,16 +196,16 @@ export class App {
       return;
     }
 
-
     // 計算直後
-    if (this.justCalculated) {
-
+    if (
+      this.calculationSource === 'SQRT' ||
+      this.calculationSource === 'PERCENT' ||
+      this.calculationSource === 'EQUAL'
+    ) {
       this.currentValue = '0.';
-
-      this.justCalculated = false;
       this.waitingForOperand = false;
-      this.calculatedByEqual = false;
-
+      this.calculationSource = 'NONE';
+      this.clearPercentState();
       return;
     }
 
@@ -212,25 +214,11 @@ export class App {
     if (this.waitingForOperand) {
 
       this.currentValue = '0.';
-
       this.waitingForOperand = false;
-
       this.clearPercentState();
 
       return;
     }
-
-
-    // %直後
-    if (this.percentMode) {
-
-      this.currentValue = '0.';
-
-      this.clearPercentState();
-
-      return;
-    }
-
 
     // すでに小数点があれば何もしない
     if (this.currentValue.includes('.')) {
@@ -253,11 +241,12 @@ export class App {
 
     const currentNumber = this.currentValue;
     // ---------------------------------------------------------
-    // √など、=以外の計算直後に演算子を押した場合
+    // √の直後に演算子を押した場合
     // ---------------------------------------------------------
 
-    if (this.justCalculated && !this.calculatedByEqual && this.operator === null) {
+    if (this.operator === null) {
 
+     if (this.calculationSource === 'SQRT') {
       // √の結果を新しい左辺として扱う
       this.storedValue = currentNumber;
 
@@ -265,13 +254,10 @@ export class App {
       this.operator = nextOperator;
 
       this.waitingForOperand = true;
-      this.justCalculated = false;
-      this.calculatedByEqual = false;
-
-      this.clearPercentState();
-
+      this.calculationSource = 'NONE';
       return;
     }
+    
 
 
 
@@ -279,7 +265,8 @@ export class App {
     // 計算直後に演算子を押した場合
     // ---------------------------------------------------------
 
-    if (this.justCalculated && this.operator === null) {
+
+    if (this.calculationSource === 'EQUAL')  {
       if (nextOperator === '×') {
 
         // C × ?
@@ -303,12 +290,12 @@ export class App {
       this.operator = nextOperator;
 
       this.waitingForOperand = true;
-      this.justCalculated = false;
-      this.calculatedByEqual = false;
+      this.calculationSource = 'NONE';
       this.clearPercentState();
 
       return;
     }
+  }
 
 
     // ---------------------------------------------------------
@@ -323,8 +310,7 @@ export class App {
       this.previousRightOperand = null;
       this.operator = nextOperator;
       this.waitingForOperand = true;
-      this.justCalculated = false;
-
+      this.calculationSource = 'NONE';
       this.clearPercentState();
       return;
     }
@@ -351,10 +337,9 @@ export class App {
       // 直前の計算で使った右辺を保存
       this.previousRightOperand = currentNumber;
 
-      // 計算結果を次の左辺にする
-      this.storedValue = result;
-
+      // 計算結果を次の左辺に
       this.currentValue = this.formatNumber(result);
+      this.storedValue = this.currentValue;
     } else {
 
       // 最初の演算子
@@ -376,9 +361,8 @@ export class App {
 
     this.operator = nextOperator;
     this.waitingForOperand = true;
-    this.justCalculated = false;
-    this.calculatedByEqual = false;
   }
+  
 
   // =========================================================
   // %
@@ -420,8 +404,8 @@ export class App {
     ) {
 
       this.currentValue = '0';
-      this.justCalculated = true;
       this.waitingForOperand = false;
+      this.calculationSource = 'PERCENT';
       this.resetRepeatState();
       return;
     }
@@ -445,7 +429,7 @@ export class App {
 
       this.currentValue = this.formatNumber(result);
       this.waitingForOperand = false;
-      this.justCalculated = false;
+      this.calculationSource = 'PERCENT';
       return;
     }
 
@@ -569,7 +553,7 @@ export class App {
     // %を押した状態として記録
     this.percentMode = true;
     this.waitingForOperand = false;
-    this.justCalculated = false;
+    this.calculationSource = 'PERCENT';
 
     this.currentValue = this.formatNumber(finalResult);
   }
@@ -592,12 +576,18 @@ export class App {
     if (value < 0) {
       this.currentValue = '0';
       this.isOverflow = true;
+      this.calculationSource = 'SQRT';
       this.operator = null;
       this.waitingForOperand = false;
-      this.justCalculated = true;
       this.resetRepeatState();
-      this.calculatedByEqual = true;
+
       return;
+    }
+
+    if (this.percentMode) {
+      this.storedValue = null;
+      this.operator = null;
+      this.previousRightOperand = null;
     }
 
     // 平方根を計算
@@ -614,9 +604,8 @@ export class App {
 
 
     this.waitingForOperand = false;
-    this.justCalculated = true;
-    this.calculatedByEqual = false;
-    this.clearPercentState();
+    this.calculationSource = 'SQRT';
+    
   }
 
 
@@ -649,8 +638,7 @@ export class App {
       );
 
       this.currentValue = this.formatNumber(result);
-      this.justCalculated = true;
-      this.calculatedByEqual = true;
+      this.calculationSource = 'EQUAL';
 
       return;
     }
@@ -708,8 +696,7 @@ export class App {
         this.storedValue = null;
         this.operator = null;
         this.waitingForOperand = false;
-        this.justCalculated = true;
-        this.calculatedByEqual = true;
+        this.calculationSource = 'EQUAL';
 
         this.clearPercentState();
 
@@ -743,8 +730,7 @@ export class App {
         this.storedValue = null;
         this.operator = null;
         this.waitingForOperand = false;
-        this.justCalculated = true;
-        this.calculatedByEqual = true;
+        this.calculationSource = 'EQUAL';
         this.clearPercentState();
 
         return;
@@ -779,8 +765,7 @@ export class App {
         this.storedValue = null;
         this.operator = null;
         this.waitingForOperand = false;
-        this.justCalculated = true;
-        this.calculatedByEqual = true;
+        this.calculationSource = 'EQUAL';
 
         this.clearPercentState();
 
@@ -856,8 +841,7 @@ export class App {
         this.storedValue = null;
         this.operator = null;
         this.waitingForOperand = false;
-        this.justCalculated = true;
-        this.calculatedByEqual = true;
+        this.calculationSource = 'EQUAL';
 
         this.clearPercentState();
 
@@ -906,8 +890,7 @@ export class App {
         this.storedValue = null;
         this.operator = null;
         this.waitingForOperand = false;
-        this.justCalculated = true;
-        this.calculatedByEqual = true;
+        this.calculationSource = 'EQUAL';
 
         this.clearPercentState();
 
@@ -922,8 +905,7 @@ export class App {
       this.operator === null ||
       this.storedValue === null
     ) {
-      this.justCalculated = true;
-      this.calculatedByEqual = true;
+      this.calculationSource = 'EQUAL';
       return;
     }
 
@@ -955,8 +937,7 @@ export class App {
     this.storedValue = null;
     this.operator = null;
     this.waitingForOperand = false;
-    this.justCalculated = true;
-    this.calculatedByEqual = true;
+    this.calculationSource = 'EQUAL';
 
     this.clearPercentState();
   }
@@ -1073,9 +1054,13 @@ export class App {
 
   clear(): void {
 
+    if (this.isOverflow) {
+      return;
+    }
+
     // 計算結果表示中は C では消さない
     // AC なら clearAll() で完全に消せる
-    if (this.calculatedByEqual) {
+    if (this.calculationSource === 'EQUAL') {
       return;
     }
 
@@ -1092,7 +1077,7 @@ export class App {
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
     this.waitingForOperand = false;
-    this.justCalculated = false;
+    this.calculationSource = 'NONE';
     this.isOverflow = false;
     this.clearPercentState();
 
@@ -1106,13 +1091,12 @@ export class App {
   clearAll(): void {
 
     this.currentValue = '0';
-
     this.storedValue = null;
     this.operator = null;
 
     this.waitingForOperand = false;
-    this.justCalculated = false;
     this.isOverflow = false;
+    this.calculationSource = 'NONE';
     this.resetRepeatState();
   }
 
@@ -1138,7 +1122,6 @@ export class App {
     this.lastOperator = null;
     this.lastOperand = null;
     this.previousRightOperand = null;
-    this.calculatedByEqual = false;
     this.clearPercentState();
   }
 
