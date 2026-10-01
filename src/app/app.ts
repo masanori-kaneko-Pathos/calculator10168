@@ -1077,11 +1077,9 @@ export class App {
       return;
     }
 
-    const wasSame = this.operator === '×' && this.previousRightOperand === this.storedValue; // 反転前
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
       : '-' + this.currentValue;
-    if (wasSame) this.previousRightOperand = this.storedValue;
   }
 
   // =========================================================
@@ -1216,27 +1214,21 @@ export class App {
   private formatOverflow(valueStr: string): string {
     this.isOverflow = true;
 
-    const val = Number(valueStr);
-    const isNegative = val < 0;
-    const absVal = Math.abs(val);
+    const isNegative = valueStr.startsWith('-');
+  const absValue = isNegative ? valueStr.slice(1) : valueStr;
+  const [intPart, fracPart = ''] = absValue.split('.');
 
-    // 10^10 を基準にする
-    const mantissa = absVal / 10_000_000_000;
+  const mantissaInt = intPart.slice(0, intPart.length - 10);
+  const rest = intPart.slice(intPart.length - 10) + fracPart;
 
-    let str = mantissa.toString();
-    if (str.includes('e') || str.includes('E')) {
-      str = mantissa.toFixed(20);
-    }
-
-    const [intPart, fracPart = ''] = str.split('.');
-    const decimalDigits = Math.min(8, Math.max(0, 10 - intPart.length));
-    const truncatedFrac = fracPart.slice(0, decimalDigits);
+  const decimalDigits = Math.min(8, Math.max(0, 10 - mantissaInt.length));
+  const truncatedFrac = rest.slice(0, decimalDigits);
 
     // 表示は常に小数部を桁数ぶん0埋めする（E1.00000000）
     const mantissaText =
       decimalDigits === 0
-        ? `${intPart}.`
-        : `${intPart}.${truncatedFrac.padEnd(decimalDigits, '0')}`;
+        ? `${mantissaInt}.`
+        : `${mantissaInt}.${truncatedFrac.padEnd(decimalDigits, '0')}`;
 
 
     return isNegative
