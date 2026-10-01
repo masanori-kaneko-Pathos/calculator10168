@@ -466,15 +466,35 @@ export class App {
     }
 
     // =======================================================
-    // 演算子なし
-    //
-    // 50 %
-    // → 0
+    // 演算子なし,もしくは計算直後
     // =======================================================
     if (
       this.operator === null ||
       this.storedValue === null
-    ) {
+    ) { 
+      if (this.calculationSource === 'EQUAL') {
+        
+      if (this.lastOperator === '+' || this.lastOperator === '-') {
+        // + / - の直後は何もしない（画面の数字をそのまま維持）
+        return;
+      }
+
+      if (this.lastOperator === '×' && this.lastOperand !== null) {
+        // × の直後は、定数(元の左辺) × 現在の画面の数字の％ を計算
+        // 例: 5 × 4 = 20 のあとの % → 5 × (20 ÷ 100) = 1
+        const curPct = this.calculateResult(this.currentValue, '100', '÷');
+        const finalResult = this.calculateResult(this.lastOperand, curPct, '×');
+        this.currentValue = this.formatNumber(finalResult);
+        return;
+      }
+      if (this.lastOperator === '÷' && this.lastOperand !== null) {
+        // ÷ の直後は、現在の画面の数字 ÷ 定数(元の右辺)の％ を計算
+        const divisorPct = this.calculateResult(this.lastOperand, '100', '÷');
+        const finalResult = this.calculateResult(this.currentValue, divisorPct, '÷');
+        this.currentValue = this.formatNumber(finalResult);
+        return;
+      }
+    }
 
       this.currentValue = '0';
       this.waitingForOperand = false;
@@ -490,14 +510,19 @@ export class App {
     if (
       this.operator === '÷' &&
       this.percentBase !== null &&
-      this.percentOperand === null
+      this.percentOperand === null &&
+      !(this.percentChainOperand !== null &&
+        !this.waitingForOperand &&
+        !this.percentMode )
     ) {
 
       let result: string;
       if (this.waitingForOperand && this.percentChainOperand !== null) {
         result = this.calculateResult('100', this.percentChainOperand, '÷');
       } else {
-        const pct = this.calculateResult('100', this.percentBase, '÷');
+        const pctBase = this.percentChainOperand !== null 
+        ? this.percentChainOperand : this.percentBase;
+        const pct = this.calculateResult('100', pctBase, '÷');
         result = this.calculateResult(this.currentValue, pct, '×');
       }
 
