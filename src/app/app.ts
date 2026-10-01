@@ -27,6 +27,9 @@ export class App {
   // 現在の計算結果が何によってもたらされたか
   calculationSource: CalculationSource = 'NONE';
 
+  // 現在の数字がユーザーの入力中か
+  hasTypedInput = false;
+
   // オーバーフロー表示
   isOverflow = false;
 
@@ -95,6 +98,8 @@ export class App {
     if (this.calculationSource === 'PERCENT') {
       this.calculationSource = 'NONE';
     }
+    const wasTyped = this.hasTypedInput;
+    this.hasTypedInput = true;
 
     // ---------------------------------------------------------
     // √や=などの計算直後
@@ -151,7 +156,8 @@ export class App {
       || this.currentValue === '-0'
     ) {
 
-      this.currentValue = digit;
+      const keepMinus = this.currentValue === '-0' && wasTyped;
+      this.currentValue = (keepMinus ? '-' : '') + digit;
       this.isOverflow = false;
 
       return;
@@ -203,6 +209,9 @@ export class App {
       return;
     }
 
+    const wasTyped = this.hasTypedInput;
+    this.hasTypedInput = true;
+
     // 計算直後
     if (
       this.calculationSource === 'SQRT' ||
@@ -232,6 +241,11 @@ export class App {
       return;
     }
 
+    if (this.currentValue === '-0' && !wasTyped) {
+      this.currentValue = '0.';
+      return;
+    }
+
     this.currentValue += '.';
   }
 
@@ -246,7 +260,9 @@ export class App {
       return;
     }
 
-    const currentNumber = this.currentValue;
+    const currentNumber = this.normalizeNumber(this.currentValue);
+    this.currentValue = currentNumber;
+
     // ---------------------------------------------------------
     // √の直後に演算子を押した場合
     // ---------------------------------------------------------
@@ -651,7 +667,10 @@ export class App {
     if (this.isOverflow) {
       return;
     }
-
+    if (!this.waitingForOperand
+      && this.calculationSource === 'NONE') {
+      this.currentValue = this.normalizeNumber(this.currentValue);
+    }
 
     // =========================================================
     // 連続 =
@@ -1123,6 +1142,11 @@ export class App {
       && this.calculationSource === 'PERCENT') {
       return;
     }
+    
+    if (this.currentValue === '-0' && !this.hasTypedInput) {
+      return;   // AC / C 直後の -0 は C では変わらない
+    }
+    
 
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
@@ -1140,6 +1164,7 @@ export class App {
 
   clearAll(): void {
 
+    this.hasTypedInput = false;
     this.currentValue = '0';
     this.storedValue = null;
     this.operator = null;
@@ -1151,6 +1176,14 @@ export class App {
   }
 
 
+  // 入力確定時の整形: 5.0 → 5、-5. → -5、-0 → 0、0.50 → 0.5（整数の 0 は消さない）
+  private normalizeNumber(value: string): string {
+    let result = value;
+    if (result.includes('.')) {
+      result = result.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return result === '-0' ? '0' : result;
+  }
   // =========================================================
   // %状態解除
   // =========================================================
