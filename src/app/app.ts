@@ -94,11 +94,13 @@ export class App {
     if (this.isOverflow) {
       return;
     }
+    const wasTyped =
+      this.hasTypedInput && this.calculationSource === 'NONE';
 
     if (this.calculationSource === 'PERCENT') {
       this.calculationSource = 'NONE';
     }
-    const wasTyped = this.hasTypedInput;
+
     this.hasTypedInput = true;
 
     // ---------------------------------------------------------
@@ -366,7 +368,6 @@ export class App {
           : null;
 
       const resultStr = this.formatNumber(result);
-      this.storedValue = this.currentValue
 
       if (nextOperator === '×') {
         // 計算結果自体を次の右辺にする
@@ -667,8 +668,7 @@ export class App {
     if (this.isOverflow) {
       return;
     }
-    if (!this.waitingForOperand
-      && this.calculationSource === 'NONE') {
+    if (!this.waitingForOperand) {
       this.currentValue = this.normalizeNumber(this.currentValue);
     }
 
@@ -1142,11 +1142,11 @@ export class App {
       && this.calculationSource === 'PERCENT') {
       return;
     }
-    
+
     if (this.currentValue === '-0' && !this.hasTypedInput) {
       return;   // AC / C 直後の -0 は C では変わらない
     }
-    
+
 
     // 現在表示している数字だけをクリア
     this.currentValue = '0';
