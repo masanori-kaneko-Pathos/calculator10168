@@ -94,6 +94,7 @@ export class App {
     if (this.isOverflow) {
       return;
     }
+
     const wasTyped =
       this.hasTypedInput && this.calculationSource === 'NONE';
 
@@ -111,6 +112,10 @@ export class App {
       this.calculationSource === 'SQRT' ||
       this.calculationSource === 'EQUAL'
     ) {
+      // %モード中は維持。連鎖の名残の percentBase だけ消す
+      if (!this.percentMode) {
+        this.clearPercentState();
+      }
       this.currentValue = digit;
       this.waitingForOperand = false;
       this.isOverflow = false;
@@ -272,6 +277,15 @@ export class App {
     if (this.operator === null) {
 
       if (this.calculationSource === 'SQRT') {
+
+        if (nextOperator === '×') {
+          this.previousRightOperand = currentNumber;
+        } else if (nextOperator === '÷') {
+          this.previousRightOperand = '1';
+        } else {
+          // + / - の場合は直前の計算の右辺を引き継ぐ
+          this.previousRightOperand = this.lastOperand;
+        }
         // √の結果を新しい左辺として扱う
         this.storedValue = currentNumber;
 
