@@ -112,10 +112,6 @@ export class App {
       this.calculationSource === 'SQRT' ||
       this.calculationSource === 'EQUAL'
     ) {
-      // %モード中は維持。連鎖の名残の percentBase だけ消す
-      if (!this.percentMode) {
-        this.clearPercentState();
-      }
       this.currentValue = digit;
       this.waitingForOperand = false;
       this.isOverflow = false;
@@ -134,7 +130,11 @@ export class App {
 
       this.waitingForOperand = false;
 
-      this.clearPercentState();
+      if (!(this.percentBase !== null
+        && this.percentOperand === null)) {
+        this.clearPercentState();
+      }
+
       this.isOverflow = false;
 
       return;
@@ -364,10 +364,30 @@ export class App {
     // ---------------------------------------------------------
 
     if (
-      this.operator !== null &&  // 演算子が入力されていて
-      this.storedValue !== null &&  // かつ右辺もあって
-      !this.waitingForOperand  //  演算子待ちではないなら
+      this.operator !== null &&  
+      this.storedValue !== null &&  
+     !this.waitingForOperand  
     ) {
+      // %を含んだ計算の場合
+      if (this.percentBase !== null &&
+         this.percentOperand === null && 
+         !this.percentMode) {
+        if (this.percentChainOperand === null) {
+          // 連鎖の最初の演算子（例：50 × % 5 + ）
+          this.percentChainOperand = currentNumber;
+        } else {
+          // 連鎖の2回目以降の演算子（例：... 5 √ + 3 ÷ ）
+          const chainResult = this.calculateResult(this.percentChainOperand, currentNumber, this.operator);
+          this.percentChainOperand = this.formatNumber(chainResult);
+        }
+        // 左辺の計算を乗っ取り、右辺の結果を保持して次へ
+        this.currentValue = this.percentChainOperand;
+        this.storedValue = this.currentValue;
+        this.operator = nextOperator;
+        this.waitingForOperand = true;
+        return;
+      }
+
       const leftValue = this.storedValue;
 
       const result = this.calculateResult(
@@ -376,10 +396,6 @@ export class App {
         this.operator
       );
 
-      this.percentChainOperand =
-        this.percentBase !== null && this.percentOperand === null
-          ? currentNumber
-          : null;
 
       const resultStr = this.formatNumber(result);
 
