@@ -345,8 +345,8 @@ export class App {
 
     if (this.percentMode) {
       // %で表示されている値を、そのまま新しい左辺にする
+      this.previousRightOperand = this.storedValue;
       this.storedValue = currentNumber;
-      this.previousRightOperand = null;
       this.operator = nextOperator;
       this.waitingForOperand = true;
       this.calculationSource = 'NONE';
