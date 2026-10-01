@@ -588,7 +588,7 @@ export class App {
     const valueStr = this.currentValue;
 
     // 負数の平方根
-    if (valueStr.startsWith('-')) {
+    if (valueStr.startsWith('-') && !/^-0\.?0*$/.test(valueStr)) {
       this.currentValue = '0';
       this.isOverflow = true;
       this.calculationSource = 'SQRT';
@@ -598,7 +598,8 @@ export class App {
 
       return;
     }
-    if (valueStr === '0') {
+    if (valueStr === '0' || /^-0\.?0*$/.test(valueStr)) {
+      this.currentValue = '0';
       this.calculationSource = 'SQRT';
       this.waitingForOperand = false;
       return;
