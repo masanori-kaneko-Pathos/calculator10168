@@ -73,6 +73,8 @@ export class App {
   // 「%」を押した状態か
   percentMode = false;
 
+  percentChainOperand: string | null = null;
+
   // %を押す直前の左辺 A
   percentBase: string | null = null;
 
@@ -334,13 +336,21 @@ export class App {
       this.storedValue !== null &&  // かつ右辺もあって
       !this.waitingForOperand  //  演算子待ちではないなら
     ) {
+      const leftValue = this.storedValue;
+
       const result = this.calculateResult(
-        this.storedValue,
+        leftValue,
         currentNumber,
         this.operator
       );
 
+      this.percentChainOperand =
+        this.percentBase !== null && this.percentOperand === null
+          ? currentNumber
+          : null;
+
       const resultStr = this.formatNumber(result);
+      this.storedValue = this.currentValue
 
       if (nextOperator === '×') {
         // 計算結果自体を次の右辺にする
@@ -350,7 +360,8 @@ export class App {
         this.previousRightOperand = '1';
       } else {
         // +と-はそのまま
-        this.previousRightOperand = currentNumber;
+        this.previousRightOperand =
+          this.operator === '×' ? leftValue : currentNumber;
       }
       // 計算結果を次の左辺に
       this.currentValue = resultStr;
@@ -435,11 +446,13 @@ export class App {
       this.percentOperand === null
     ) {
 
-      const divisor =
-        this.percentBase;
-
-      const pct = this.calculateResult('100', divisor, '÷');
-      const result = this.calculateResult(this.currentValue, pct, '×');
+      let result: string;
+      if (this.waitingForOperand && this.percentChainOperand !== null) {
+        result = this.calculateResult('100', this.percentChainOperand, '÷');
+      } else {
+        const pct = this.calculateResult('100', this.percentBase, '÷');
+        result = this.calculateResult(this.currentValue, pct, '×');
+      }
 
       this.currentValue = this.formatNumber(result);
       this.waitingForOperand = false;
@@ -462,7 +475,7 @@ export class App {
       // → 50 +/- のまま
       // -------------------------------------------------------
       if (this.operator === '+' || this.operator === '-') {
-        this.currentValue = this.formatNumber(base);
+        this.currentValue = base;
         return;
       }
 
@@ -764,7 +777,9 @@ export class App {
         const divisor =
           this.percentOperand !== null
             ? this.percentOperand
-            : this.percentBase;
+            : this.percentChainOperand !== null
+              ? this.percentChainOperand
+              : this.percentBase;
 
         if (divisor === null) {
           return;
@@ -1072,7 +1087,7 @@ export class App {
           ? this.storedValue.slice(1)
           : '-' + this.storedValue;
         if (wasSame) this.previousRightOperand = this.storedValue;
-        this.currentValue = this.formatNumber(this.storedValue);
+        this.currentValue = this.storedValue;
       }
       return;
     }
@@ -1143,6 +1158,7 @@ export class App {
   private clearPercentState(): void {
 
     this.percentMode = false;
+    this.percentChainOperand = null;
     this.percentBase = null;
     this.percentOperand = null;
   }
@@ -1215,14 +1231,14 @@ export class App {
     this.isOverflow = true;
 
     const isNegative = valueStr.startsWith('-');
-  const absValue = isNegative ? valueStr.slice(1) : valueStr;
-  const [intPart, fracPart = ''] = absValue.split('.');
+    const absValue = isNegative ? valueStr.slice(1) : valueStr;
+    const [intPart, fracPart = ''] = absValue.split('.');
 
-  const mantissaInt = intPart.slice(0, intPart.length - 10);
-  const rest = intPart.slice(intPart.length - 10) + fracPart;
+    const mantissaInt = intPart.slice(0, intPart.length - 10);
+    const rest = intPart.slice(intPart.length - 10) + fracPart;
 
-  const decimalDigits = Math.min(8, Math.max(0, 10 - mantissaInt.length));
-  const truncatedFrac = rest.slice(0, decimalDigits);
+    const decimalDigits = Math.min(8, Math.max(0, 10 - mantissaInt.length));
+    const truncatedFrac = rest.slice(0, decimalDigits);
 
     // 表示は常に小数部を桁数ぶん0埋めする（E1.00000000）
     const mantissaText =
