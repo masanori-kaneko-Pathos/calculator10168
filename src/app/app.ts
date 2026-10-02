@@ -3,11 +3,14 @@ import { CommonModule } from '@angular/common';
 
 type Operator = '+' | '-' | '×' | '÷';
 
-type CalculationSource =
-  | 'NONE'
-  | 'EQUAL'
-  | 'SQRT'
-  | 'PERCENT';
+type CalculatorState =
+  | 'INITIAL'
+  | 'INPUT_LEFT'       // 最初の数字（左辺）を入力中、または初期状態
+  | 'WAITING_RIGHT'    // 演算子を押して、次の数字（右辺）を待っている状態
+  | 'INPUT_RIGHT'      // 右辺の数字を入力中
+  | 'RESULT_SHOWN'     // 「＝」を押して結果を表示している状態
+  | 'SQRT_SHOWN'       // 「√」を押して結果を表示している状態
+  | 'PERCENT_SHOWN';   // 「％」を押して結果を表示している状態
 
 @Component({
   selector: 'app-root',
@@ -21,14 +24,10 @@ export class App {
   // 基本状態
   // =========================================================
 
+  currentState: CalculatorState = 'INITIAL';
+
   // 現在ディスプレイに表示している値
   currentValue = '0';
-
-  // 現在の計算結果が何によってもたらされたか
-  calculationSource: CalculationSource = 'NONE';
-
-  // 現在の数字がユーザーの入力中か
-  hasTypedInput = false;
 
   // オーバーフロー表示
   isOverflow = false;
@@ -38,10 +37,6 @@ export class App {
 
   // 現在選択されている演算子
   operator: Operator | null = null;
-
-  // 演算子を押した直後か
-  waitingForOperand = false;
-
 
   // =========================================================
   // 連続「=」用
@@ -57,6 +52,9 @@ export class App {
   // previousRightOperand = 3
   previousRightOperand: string | null = null;
 
+  previousByOperator: Record<Operator, string | null>
+    = { '+': null, '-': null, '×': null, '÷': null };
+
   // 連続「=」で繰り返し使用する値
   //
   // 例:
@@ -68,13 +66,9 @@ export class App {
   // この場合は最終的に 12 が入る。
   lastOperand: string | null = null;
 
-
   // =========================================================
   // % 専用状態
   // =========================================================
-
-  // 「%」を押した状態か
-  percentMode = false;
 
   percentChainOperand: string | null = null;
 
@@ -84,580 +78,367 @@ export class App {
   // %を押したときの右辺 B
   percentOperand: string | null = null;
 
-
   // =========================================================
   // 数字入力
   // =========================================================
 
   inputDigit(digit: string): void {
+    if (this.isOverflow) return;
 
-    if (this.isOverflow) {
-      return;
-    }
+    // ▼ 新しいステートマシンによる制御
+    switch (this.currentState) {
 
-    const wasTyped =
-      this.hasTypedInput && this.calculationSource === 'NONE';
+      case 'INITIAL':
+        this.currentValue = digit;          // inputDecimal は '0.'
+        this.currentState = 'INPUT_LEFT';
+        break;
 
-    if (this.calculationSource === 'PERCENT') {
-      this.calculationSource = 'NONE';
-    }
-
-    this.hasTypedInput = true;
-
-    // ---------------------------------------------------------
-    // √や=などの計算直後
-    // ---------------------------------------------------------
-
-    if (
-      this.calculationSource === 'SQRT' ||
-      this.calculationSource === 'EQUAL'
-    ) {
-      this.currentValue = digit;
-      this.waitingForOperand = false;
-      this.isOverflow = false;
-      this.calculationSource = 'NONE';
-      return;
-    }
-
-
-    // ---------------------------------------------------------
-    // 演算子直後
-    // ---------------------------------------------------------
-
-    if (this.waitingForOperand) {
-
-      this.currentValue = digit;
-
-      this.waitingForOperand = false;
-
-      if (!(this.percentBase !== null
-        && this.percentOperand === null)) {
+      case 'RESULT_SHOWN':
+        this.currentValue = digit;
+        this.currentState = 'INPUT_LEFT';
         this.clearPercentState();
-      }
+        break;
 
-      this.isOverflow = false;
+      case 'WAITING_RIGHT':
+        this.currentValue = digit;
+        this.currentState = 'INPUT_RIGHT';
+        this.clearPercentState();
+        break;
 
-      return;
+      case 'SQRT_SHOWN':
+        this.currentValue = digit;
+        this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        break;
+
+      case 'PERCENT_SHOWN':
+        // %直後の数字入力：画面を置き換えて新しい入力状態へ
+        this.currentValue = digit;
+        this.currentState = this.operator ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        break;
+
+      case 'INPUT_LEFT':
+      case 'INPUT_RIGHT':
+        // 0や-0の置き換え（hasTypedInputフラグを使わずにシンプルに判定可能に！）
+        if (this.currentValue === '0') {
+          this.currentValue = digit;
+        } else if (this.currentValue === '-0') {
+          this.currentValue = '-' + digit;
+        } else {
+          // 桁数制限
+          const digitCount = this.currentValue.replace('.', '').replace('-', '').length;
+          if (digitCount >= 10) return;
+          if (this.currentValue.includes('.')) {
+            const decimalPart = this.currentValue.split('.')[1];
+            if (decimalPart && decimalPart.length >= 8) return;
+          }
+          this.currentValue += digit;
+        }
+        break;
     }
-
-
-    // ---------------------------------------------------------
-    // %の直後に数字を入力した場合
-    // ---------------------------------------------------------
-
-    if (this.percentMode) {
-
-      this.currentValue = digit;
-      this.percentMode = false;
-      this.isOverflow = false;
-
-      return;
-    }
-
-
-    // ---------------------------------------------------------
-    // 0,-0なら置き換え
-    // ---------------------------------------------------------
-
-    if (this.currentValue === '0'
-      || this.currentValue === '-0'
-    ) {
-
-      const keepMinus = this.currentValue === '-0' && wasTyped;
-      this.currentValue = (keepMinus ? '-' : '') + digit;
-      this.isOverflow = false;
-
-      return;
-    }
-
-    // ---------------------------------------------------------
-    // 現在の数字の「数字部分」だけ数える
-    // ---------------------------------------------------------
-
-    const digitCount =
-      this.currentValue
-        .replace('.', '')
-        .replace('-', '')
-        .length;
-
-
-    // ---------------------------------------------------------
-    // 10桁に達していたら入力を無視
-    // ---------------------------------------------------------
-
-    if (digitCount >= 10) {
-      return;
-    }
-
-    if (this.currentValue.includes('.')) {
-      const parts = this.currentValue.split('.');
-      const decimalPart = parts[1]; // 小数点より右側の文字列
-
-      if (decimalPart && decimalPart.length >= 8) {
-        // すでに小数第8位まで入力されていたら、入力を無視
-        return;
-      }
-    }
-    // ---------------------------------------------------------
-    // それ以外は末尾に追加
-    // ---------------------------------------------------------
-
-    this.currentValue += digit;
   }
-
 
   // =========================================================
   // 小数点
   // =========================================================
 
   inputDecimal(): void {
+    if (this.isOverflow) return;
 
-    if (this.isOverflow) {
-      return;
+    switch (this.currentState) {
+      case 'INITIAL':
+        this.currentValue = '0.';          // inputDecimal は '0.'
+        this.currentState = 'INPUT_LEFT';
+        break;
+
+      case 'RESULT_SHOWN':
+        this.currentValue = '0.';
+        this.currentState = 'INPUT_LEFT';
+        this.clearPercentState();
+        break;
+
+      case 'SQRT_SHOWN':
+      case 'PERCENT_SHOWN':
+        this.currentValue = '0.';
+        this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        break;
+
+      case 'WAITING_RIGHT':
+        this.currentValue = '0.';
+        this.currentState = 'INPUT_RIGHT';
+        this.clearPercentState();
+        break;
+
+      case 'INPUT_LEFT':
+      case 'INPUT_RIGHT':
+        if (this.currentValue.includes('.')) return;
+        this.currentValue += '.';
+        break;
     }
-
-    const wasTyped = this.hasTypedInput;
-    this.hasTypedInput = true;
-
-    // 計算直後
-    if (
-      this.calculationSource === 'SQRT' ||
-      this.calculationSource === 'PERCENT' ||
-      this.calculationSource === 'EQUAL'
-    ) {
-      this.currentValue = '0.';
-      this.waitingForOperand = false;
-      this.calculationSource = 'NONE';
-      this.clearPercentState();
-      return;
-    }
-
-
-    // 演算子直後
-    if (this.waitingForOperand) {
-
-      this.currentValue = '0.';
-      this.waitingForOperand = false;
-      this.clearPercentState();
-
-      return;
-    }
-
-    // すでに小数点があれば何もしない
-    if (this.currentValue.includes('.')) {
-      return;
-    }
-
-    if (this.currentValue === '-0' && !wasTyped) {
-      this.currentValue = '0.';
-      return;
-    }
-
-    this.currentValue += '.';
   }
-
 
   // =========================================================
   // 四則演算子
   // =========================================================
 
   inputOperator(nextOperator: Operator): void {
-
-    if (this.isOverflow) {
-      return;
-    }
+    if (this.isOverflow) return;
 
     const currentNumber = this.normalizeNumber(this.currentValue);
     this.currentValue = currentNumber;
 
-    // ---------------------------------------------------------
-    // √の直後に演算子を押した場合
-    // ---------------------------------------------------------
+    const state: CalculatorState =
+      this.currentState === 'SQRT_SHOWN' && this.operator !== null
+        ? (this.percentBase !== null && this.percentOperand !== null
+          ? 'PERCENT_SHOWN' : 'INPUT_RIGHT')
+        : this.currentState;
+    switch (state) {
 
-    if (this.operator === null) {
-
-      if (this.calculationSource === 'SQRT') {
-
-        if (nextOperator === '×') {
-          this.previousRightOperand = currentNumber;
-        } else if (nextOperator === '÷') {
-          this.previousRightOperand = '1';
-        } else {
-          // + / - の場合は直前の計算の右辺を引き継ぐ
-          this.previousRightOperand = this.lastOperand;
-        }
-        // √の結果を新しい左辺として扱う
+      case 'INITIAL':
+      case 'INPUT_LEFT':
+        // 最初の演算子入力
         this.storedValue = currentNumber;
-
-        // 今押された演算子を新しい演算子にする
+        this.setPrevious({ '+': null, '-': null, '×': null, '÷': null }, nextOperator);
         this.operator = nextOperator;
+        this.currentState = 'WAITING_RIGHT';
+        break;
 
-        this.waitingForOperand = true;
-        this.calculationSource = 'NONE';
-        return;
-      }
-
-
-
-
-      // ---------------------------------------------------------
-      // 計算直後に演算子を押した場合
-      // ---------------------------------------------------------
-
-
-      if (this.calculationSource === 'EQUAL') {
-        if (nextOperator === '×') {
-
-          // C × ?
-          // 「=」で C を右辺に入れる
-          this.previousRightOperand = currentNumber;
-
-        } else if (nextOperator === '÷') {
-
-          // C ÷ ?
-          // 「=」で 1 を右辺に入れる
-          this.previousRightOperand = '1';
-
-        } else {
-
-          // + / -
-          // 従来どおり、元の右辺を使う
-          this.previousRightOperand = this.lastOperand;
-        }
-
+      case 'WAITING_RIGHT':
+        // 演算子の付け替え：最初に押した時に計算しておいた候補から選び直す
         this.storedValue = currentNumber;
         this.operator = nextOperator;
+        this.previousRightOperand = this.previousByOperator[nextOperator];
+        break;
 
-        this.waitingForOperand = true;
-        this.calculationSource = 'NONE';
+      case 'INPUT_RIGHT':
+        // 既に右辺が入力されていて、連続計算になるケース（12 + 3 × -> 15 ×）
+        if (this.storedValue !== null && this.operator !== null) {
+
+          const leftValue = this.storedValue;
+
+          const percentOrigin = this.percentBase !== null && this.percentOperand === null;
+          const resultStr = percentOrigin ? currentNumber : this.formatNumber(this.calculateResult(
+            leftValue,
+            currentNumber,
+            this.operator
+          ));
+          this.percentChainOperand = percentOrigin ? currentNumber : null;
+
+          const addSubPrev = (this.operator === '×' || percentOrigin) ? leftValue : currentNumber;
+          this.setPrevious({
+            '×': percentOrigin ? currentNumber : resultStr,
+            '÷': '1',
+            '+': addSubPrev,
+            '-': addSubPrev,
+          }, nextOperator);
+
+          this.currentValue = percentOrigin ? currentNumber : resultStr;
+          this.storedValue = this.currentValue;
+          this.operator = nextOperator;
+          this.currentState = 'WAITING_RIGHT';
+        }
+        break;
+
+      case 'RESULT_SHOWN':
+      case 'SQRT_SHOWN':
+        // = や √ の計算直後に演算子を押した場合
+        this.setPrevious({
+          '×': currentNumber,
+          '÷': '1',
+          '+': this.lastOperand,
+          '-': this.lastOperand,
+        }, nextOperator);
+        this.storedValue = currentNumber;
+        this.operator = nextOperator;
+        this.currentState = 'WAITING_RIGHT';
         this.clearPercentState();
+        break;
 
-        return;
-      }
-    }
+      case 'PERCENT_SHOWN':
+        const percentOrigin = this.percentBase !== null && this.percentOperand === null;
 
-
-    // ---------------------------------------------------------
-    // %直後に演算子を押した場合
-    //
-    // %で作られた表示値を次の計算の左辺として使う。
-    // ---------------------------------------------------------
-
-    if (this.percentMode) {
-      // %で表示されている値を、そのまま新しい左辺にする
-      this.previousRightOperand = this.storedValue;
-      this.storedValue = currentNumber;
-      this.operator = nextOperator;
-      this.waitingForOperand = true;
-      this.calculationSource = 'NONE';
-      this.clearPercentState();
-      return;
-    }
-
-
-    // ---------------------------------------------------------
-    // すでに演算子があり、右辺も入力済み
-    //
-    // 12 + 3 ×
-    // ↓
-    // 15 ×
-    // ---------------------------------------------------------
-
-    if (
-      this.operator !== null &&  
-      this.storedValue !== null &&  
-     !this.waitingForOperand  
-    ) {
-      // %を含んだ計算の場合
-      if (this.percentBase !== null &&
-         this.percentOperand === null && 
-         !this.percentMode) {
-        if (this.percentChainOperand === null) {
-          // 連鎖の最初の演算子（例：50 × % 5 + ）
-          this.percentChainOperand = currentNumber;
+        if (percentOrigin) {
+          // ％起点の連鎖（50×%など）は、大元の左辺(50)を暗黙の右辺として退避させる
+          const b = this.storedValue;
+          this.setPrevious({ '×': b, '÷': b, '+': b, '-': b }, nextOperator);
         } else {
-          // 連鎖の2回目以降の演算子（例：... 5 √ + 3 ÷ ）
-          const chainResult = this.calculateResult(this.percentChainOperand, currentNumber, this.operator);
-          this.percentChainOperand = this.formatNumber(chainResult);
+          // 普通の％計算結果（50×20%など）は、通常の計算結果（RESULT_SHOWN）直後と同じ振る舞いにする
+          this.setPrevious({
+            '×': currentNumber,
+            '÷': '1',
+            '+': this.storedValue,
+            '-': this.storedValue,
+          }, nextOperator);
         }
-        // 左辺の計算を乗っ取り、右辺の結果を保持して次へ
-        this.currentValue = this.percentChainOperand;
-        this.storedValue = this.currentValue;
+
+        this.storedValue = currentNumber;
         this.operator = nextOperator;
-        this.waitingForOperand = true;
-        return;
-      }
-
-      const leftValue = this.storedValue;
-
-      const result = this.calculateResult(
-        leftValue,
-        currentNumber,
-        this.operator
-      );
-
-
-      const resultStr = this.formatNumber(result);
-
-      if (nextOperator === '×') {
-        // 計算結果自体を次の右辺にする
-        this.previousRightOperand = resultStr;
-      } else if (nextOperator === '÷') {
-        // ÷の連続は右辺を1にする
-        this.previousRightOperand = '1';
-      } else {
-        // +と-はそのまま
-        this.previousRightOperand =
-          this.operator === '×' ? leftValue : currentNumber;
-      }
-      // 計算結果を次の左辺に
-      this.currentValue = resultStr;
-      this.storedValue = this.currentValue;
-    } else {
-
-      // 最初の演算子
-      this.storedValue = currentNumber;
-
-      // 演算子の付け替え（5 + ×）ではなく新しい計算の開始なら、
-      // 前の計算の右辺は引き継がない
-      if (!this.waitingForOperand) {
-        this.previousRightOperand = null;
-      } else {
-        // + や - は直前の右辺を維持するが、× や ÷ に付け替えた場合はリセットする
-        if (nextOperator === '×' || nextOperator === '÷') {
-          this.previousRightOperand = null;
-        }
-      }
-
+        this.currentState = 'WAITING_RIGHT';
+        this.clearPercentState();
+        break;
     }
-
-
-    this.operator = nextOperator;
-    this.waitingForOperand = true;
   }
+
+
+  private setPrevious(map: Record<Operator, string | null>, next: Operator): void {
+    this.previousByOperator = map;
+    this.previousRightOperand = map[next];
+  }
+
 
 
   // =========================================================
   // %
   // =========================================================
   inputPercent(): void {
-
-    if (this.isOverflow) {
-      return;
-    }
+    if (this.isOverflow) return;
 
     const currentNumber = this.currentValue;
     let finalResult = '0';
 
-    // =======================================================
-    // + / - で % を一度計算した後の % は無視
-    //
-    // 50 + 20 %
-    // → 60
-    //
-    // もう一度 %
-    // → 何もしない
-    // =======================================================
-    if (
-      this.percentMode &&
-      (this.operator === '+' || this.operator === '-')
-    ) {
-      return;
-    }
-
-    // =======================================================
-    // 演算子なし,もしくは計算直後
-    // =======================================================
-    if (
-      this.operator === null ||
-      this.storedValue === null
-    ) { 
-      if (this.calculationSource === 'EQUAL') {
-        
-      if (this.lastOperator === '+' || this.lastOperator === '-') {
-        // + / - の直後は何もしない（画面の数字をそのまま維持）
-        return;
-      }
-
-      if (this.lastOperator === '×' && this.lastOperand !== null) {
-        // × の直後は、定数(元の左辺) × 現在の画面の数字の％ を計算
-        // 例: 5 × 4 = 20 のあとの % → 5 × (20 ÷ 100) = 1
-        const curPct = this.calculateResult(this.currentValue, '100', '÷');
-        const finalResult = this.calculateResult(this.lastOperand, curPct, '×');
-        this.currentValue = this.formatNumber(finalResult);
-        return;
-      }
-      if (this.lastOperator === '÷' && this.lastOperand !== null) {
-        // ÷ の直後は、現在の画面の数字 ÷ 定数(元の右辺)の％ を計算
-        const divisorPct = this.calculateResult(this.lastOperand, '100', '÷');
-        const finalResult = this.calculateResult(this.currentValue, divisorPct, '÷');
-        this.currentValue = this.formatNumber(finalResult);
-        return;
-      }
-    }
-
-      this.currentValue = '0';
-      this.waitingForOperand = false;
-      this.calculationSource = 'PERCENT';
-      this.resetRepeatState();
-      return;
-    }
-
-    // =======================================================
-    // 除算ですでに ÷ % を押している場合
-    // =======================================================
-
-    if (
-      this.operator === '÷' &&
-      this.percentBase !== null &&
-      this.percentOperand === null &&
-      !(this.percentChainOperand !== null &&
-        !this.waitingForOperand &&
-        !this.percentMode )
-    ) {
-
-      let result: string;
-      if (this.waitingForOperand && this.percentChainOperand !== null) {
-        result = this.calculateResult('100', this.percentChainOperand, '÷');
-      } else {
-        const pctBase = this.percentChainOperand !== null 
-        ? this.percentChainOperand : this.percentBase;
-        const pct = this.calculateResult('100', pctBase, '÷');
-        result = this.calculateResult(this.currentValue, pct, '×');
-      }
-
-      this.currentValue = this.formatNumber(result);
-      this.waitingForOperand = false;
-      this.calculationSource = 'PERCENT';
-      this.percentMode = true;
-      return;
-    }
-
-
-    const base = this.storedValue;
-
-    // =======================================================
-    // =======================================================
-    // 右辺が存在しない場合
-    // =======================================================
-    // =======================================================
-    if (this.waitingForOperand) {
+    const state: CalculatorState =
+      this.currentState === 'SQRT_SHOWN' && this.operator !== null
+        ? 'INPUT_RIGHT'
+        : this.currentState;
+    switch (state) {
       // -------------------------------------------------------
-      // 50 +/- %
-      // → 50 +/- のまま
+      // = の直後（定数を使った特殊な％計算）
       // -------------------------------------------------------
-      if (this.operator === '+' || this.operator === '-') {
-        this.currentValue = base;
-        return;
-      }
+      case 'RESULT_SHOWN':
+        if (
+          this.lastOperator === null ||
+          this.lastOperator === '+' ||
+          this.lastOperator === '-') {
+          return;
+        }
+        if (this.lastOperator === '×' && this.lastOperand !== null) {
 
-      this.percentOperand = null;
-      this.percentBase = base;
-      this.percentMode = true;
+          const curPct = this.calculateResult(
+            this.currentValue,
+            '100',
+            '÷'
+          );
 
-
-      // -------------------------------------------------------
-      // ×
-      //
-      // 50 × %
-      // → 25
-      // -------------------------------------------------------
-      if (this.operator === '×') {
-
-        const pct = this.calculateResult(base, '100', '÷');
-        finalResult = this.calculateResult(base, pct, '×');
-
-      }
-
-      // -------------------------------------------------------
-      // ÷
-      //
-      // 50 ÷ %
-      // → 2
-      // -------------------------------------------------------
-      else if (this.operator === '÷') {
-
-        finalResult = this.calculateResult('100', base, '÷');
-
-      }
-    }
-
-    // =======================================================
-    // =======================================================
-    // 右辺が存在する場合
-    // =======================================================
-    // =======================================================
-
-    else {
-      this.percentBase = base;
-
-      // ÷ は最初の percentOperand を保持
-      if (this.operator === '÷' && this.percentOperand !== null) {
-
-        const pct = this.calculateResult(
-          this.percentOperand,
-          '100',
-          '÷'
-        );
-
-        finalResult = this.calculateResult(
-          currentNumber,
-          pct,
-          '÷'
-        );
-
-      } else {
-
-        // + / - / × は今回の右辺を保存
-        this.percentOperand = currentNumber;
-
-        const curPct = this.calculateResult(
-          currentNumber,
-          '100',
-          '÷'
-        );
-
-        if (this.operator === '+' || this.operator === '-') {
-          const delta = this.calculateResult(
-            base,
+          finalResult = this.calculateResult(
+            this.lastOperand,
             curPct,
             '×'
           );
-
-          finalResult = this.calculateResult(
-            base,
-            delta,
-            this.operator
+        } else if (this.lastOperator === '÷' && this.lastOperand !== null) {
+          const divisorPct = this.calculateResult(
+            this.lastOperand,
+            '100',
+            '÷'
           );
-
-        } else if (this.operator === '×') {
           finalResult = this.calculateResult(
-            base,
-            curPct,
-            '×'
-          );
-        } else if (this.operator === '÷') {
-          // 1回目の ÷ %
-          finalResult = this.calculateResult(
-            base,
-            curPct,
+            this.currentValue,
+            divisorPct,
             '÷'
           );
         }
+        this.currentValue = this.formatNumber(finalResult);
+        this.currentState = 'RESULT_SHOWN';
+        break;
+
+      // -------------------------------------------------------
+      // 演算子なし（一番最初の入力時など）
+      // -------------------------------------------------------
+      case 'INITIAL':
+      case 'INPUT_LEFT':
+        if (this.operator === null || this.storedValue === null) {
+          if (this.currentValue !== '0' && this.currentValue !== '-0') {
+            this.currentValue = '0';
+          }
+          if (this.currentState !== 'INITIAL')
+            this.currentState = 'PERCENT_SHOWN';
+          this.resetRepeatState();
+        }
+        break;
+
+      case 'SQRT_SHOWN':
+        if (this.operator === null || this.storedValue === null) {
+          this.currentValue = '0';
+          this.currentState = 'PERCENT_SHOWN';
+          this.resetRepeatState();
+        }
+        break;
+
+      // -------------------------------------------------------
+      // ％の連続押し、または％連鎖中の特殊除算
+      // -------------------------------------------------------
+      case 'PERCENT_SHOWN': {
+        if (this.operator === null || this.storedValue === null) return;
+        if (this.operator === '+' || this.operator === '-') return;
+        if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
+          const divisor = this.percentChainOperand ?? this.percentBase;
+          const pct = this.calculateResult('100', divisor, '÷');
+          finalResult = this.calculateResult(this.currentValue, pct, '×');
+        } else {
+          finalResult = this.percentWithRightOperand(this.storedValue, currentNumber);
+        }
+        this.currentValue = this.formatNumber(finalResult);
+        this.currentState = 'PERCENT_SHOWN';
+        break;
+      }
+
+      case 'WAITING_RIGHT': {
+        const base = this.storedValue!;
+        if (this.operator === '+' || this.operator === '-') {
+          this.currentValue = base;      // 50 + % → 50 のまま。％状態には入らない
+          return;
+        }
+        if (this.operator === '÷' && this.percentBase !== null &&
+          this.percentOperand === null && this.percentChainOperand !== null) {
+          finalResult = this.calculateResult('100', this.percentChainOperand, '÷');
+        } else {
+          this.percentBase = base;
+          this.percentOperand = null;
+          if (this.operator === '×') {
+            const pct = this.calculateResult(base, '100', '÷');
+            finalResult = this.calculateResult(base, pct, '×');
+          } else if (this.operator === '÷') {
+            finalResult = this.calculateResult('100', base, '÷');
+          }
+        }
+        this.currentValue = this.formatNumber(finalResult);
+        this.currentState = 'PERCENT_SHOWN';
+        break;
+      }
+
+      case 'INPUT_RIGHT': {
+        const base = this.storedValue!;
+        if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
+          const divisor = this.percentChainOperand ?? this.percentBase;
+          const pct = this.calculateResult('100', divisor, '÷');
+          finalResult = this.calculateResult(currentNumber, pct, '×');
+        } else {
+          finalResult = this.percentWithRightOperand(base, currentNumber);
+        }
+        this.currentValue = this.formatNumber(finalResult);
+        this.currentState = 'PERCENT_SHOWN';
+        break;
       }
     }
-
-
-
-
-    // %を押した状態として記録
-    this.percentMode = true;
-    this.waitingForOperand = false;
-    this.calculationSource = 'PERCENT';
-
-    this.currentValue = this.formatNumber(finalResult);
   }
 
+  // 新規メソッド（inputPercent の下）: 旧 INPUT_RIGHT の「右辺がある場合」を共通化
+  private percentWithRightOperand(base: string, currentNumber: string): string {
+    this.percentBase = base;
+    if (this.operator === '÷' && this.percentOperand !== null) {
+      const pct = this.calculateResult(this.percentOperand, '100', '÷');
+      return this.calculateResult(currentNumber, pct, '÷');
+    }
+    this.percentOperand = currentNumber;
+    const curPct = this.calculateResult(currentNumber, '100', '÷');
+    if (this.operator === '+' || this.operator === '-') {
+      const delta = this.calculateResult(base, curPct, '×');
+      return this.calculateResult(base, delta, this.operator);
+    } else if (this.operator === '×') {
+      return this.calculateResult(base, curPct, '×');
+    } else if (this.operator === '÷') {
+      return this.calculateResult(base, curPct, '÷');
+    }
+    return '0';
+  }
 
 
   // =========================================================
@@ -665,53 +446,38 @@ export class App {
   // =========================================================
 
   inputSquareRoot(): void {
-    if (this.isOverflow) {
-      return;
-    }
+    if (this.isOverflow) return;
 
-    // 現在の値を取得
     const valueStr = this.currentValue;
 
     // 負数の平方根
     if (valueStr.startsWith('-') && !/^-0\.?0*$/.test(valueStr)) {
       this.currentValue = '0';
       this.isOverflow = true;
-      this.calculationSource = 'SQRT';
+      this.currentState = 'SQRT_SHOWN';
       this.operator = null;
-      this.waitingForOperand = false;
       this.resetRepeatState();
-
       return;
     }
+
     if (valueStr === '0' || /^-0\.?0*$/.test(valueStr)) {
       this.currentValue = '0';
-      this.calculationSource = 'SQRT';
-      this.waitingForOperand = false;
+
+      this.currentState = 'SQRT_SHOWN';
       return;
     }
 
     const [intPart, fracPart = ''] = valueStr.split('.');
-
-    // fromScaledBigInt(10^16スケール)で正しい位置に小数点を戻すためには、
-    // 計算前に「10^32倍」にしておく必要があります（ √10^32 = 10^16 になるため）
     const paddedFrac = fracPart.padEnd(32, '0').slice(0, 32);
     const bigVal = BigInt(intPart + paddedFrac);
-
-    // ニュートン法でBigIntの平方根を計算
     const resultBigInt = this.bigIntSqrt(bigVal);
-
-    // 10^16スケールのBigIntとして文字列に戻す
     const resultStr = this.fromScaledBigInt(resultBigInt);
 
-    // 表示用に整形
     this.currentValue = this.formatNumber(resultStr);
-
-    this.waitingForOperand = false;
-
-    // ％モードの魔法がかかっている最中は、PERCENTステートを維持する
-    this.calculationSource = 'SQRT';
+    this.currentState = 'SQRT_SHOWN';
 
   }
+
 
 
   // =========================================================
@@ -719,340 +485,136 @@ export class App {
   // =========================================================
 
   calculate(): void {
+    if (this.isOverflow) return;
 
-    if (this.isOverflow) {
-      return;
-    }
-    if (!this.waitingForOperand) {
+    if (this.currentState !== 'WAITING_RIGHT') {
       this.currentValue = this.normalizeNumber(this.currentValue);
     }
 
-    // =========================================================
-    // 連続 =
-    // =========================================================
-
-    if (
-      this.operator === null &&
-      this.lastOperator !== null &&
-      this.lastOperand !== null
-    ) {
-
-      const currentNumber = this.currentValue;
-      const result = this.calculateResult(
-        currentNumber,
-        this.lastOperand,
-        this.lastOperator
-      );
-
-      this.currentValue = this.formatNumber(result);
-      this.calculationSource = 'EQUAL';
-
+    // 演算子も過去の計算履歴もない状態での「=」は、そのまま結果表示状態へ移行
+    if (this.operator === null && this.lastOperator === null) {
+      this.currentState = 'RESULT_SHOWN';
       return;
     }
 
+    const state: CalculatorState =
+      this.currentState === 'SQRT_SHOWN' && this.operator !== null
+        ? (this.percentBase !== null ? 'PERCENT_SHOWN' : 'INPUT_RIGHT')
+        : this.currentState;
+    switch (state) {
 
+      // ---------------------------------------------------------
+      // 連続 =
+      // ---------------------------------------------------------
+      case 'INITIAL':
+      case 'INPUT_LEFT':
+      case 'RESULT_SHOWN':
+      case 'SQRT_SHOWN':
+        if (this.operator === null && this.lastOperator !== null && this.lastOperand !== null) {
+          const result = this.calculateResult(this.currentValue, this.lastOperand, this.lastOperator);
+          this.currentValue = this.formatNumber(result);
 
+          // 状態を更新
+          this.currentState = 'RESULT_SHOWN';
+        }
+        break;
 
-    // =========================================================
-    // %特殊処理
-    // =========================================================
-    if (
-      this.percentMode &&
-      this.percentBase !== null
-    ) {
-      const percentResult = this.currentValue;
-      const base = this.percentBase;
-      const currentOperator = this.operator;
+      // ---------------------------------------------------------
+      // %特殊処理（％のあとの＝）
+      // ---------------------------------------------------------
+      case 'PERCENT_SHOWN':
 
-      // -------------------------------------------------------
-      // + / -
-      //
-      // %を押した時点で表示値はすでに計算済み。
-      //
-      // 50 + 20 %
-      // → 60
-      // =
-      // → 60 + 50 = 110
-      //
-      // 50 - 20 %
-      // → 40
-      // =
-      // → 40 - 50 = -10
-      //
-      // 「現在の表示値」を左辺、
-      // 「元の左辺」を右辺として使用する。
-      // -------------------------------------------------------
-      if (
-        currentOperator === '+' ||
-        currentOperator === '-'
-      ) {
+        if (this.operator === null) {
+          if (this.lastOperator !== null && this.lastOperand !== null) {
+            const result = this.calculateResult(this.currentValue, this.lastOperand, this.lastOperator);
+            this.currentValue = this.formatNumber(result);
+            this.currentState = 'RESULT_SHOWN';
+          }
+          break;
+        }
+        if (this.percentBase !== null && this.operator !== null) {
+          const percentResult = this.currentValue;
+          const base = this.percentBase;
+          const currentOperator = this.operator;
 
-        const result = this.calculateResult(
-          percentResult,
-          base,
-          currentOperator);
+          if (currentOperator === '+' || currentOperator === '-') {
+            const result = this.calculateResult(percentResult, base, currentOperator);
+            this.currentValue = this.formatNumber(result);
+            this.lastOperator = currentOperator;
+            this.lastOperand = base;
+          } else if (currentOperator === '×') {
+            const result = this.calculateResult(percentResult, base, currentOperator);
+            this.currentValue = this.formatNumber(result);
+            this.lastOperator = '×';
+            this.lastOperand = base;
+          } else if (currentOperator === '÷') {
+            const divisor = this.percentOperand !== null ? this.percentOperand
+              : this.percentChainOperand !== null ? this.percentChainOperand
+                : this.percentBase;
+            if (divisor !== null) {
+              const result = this.calculateResult(percentResult, divisor, currentOperator);
+              this.currentValue = this.formatNumber(result);
+              this.lastOperator = '÷';
+              this.lastOperand = divisor;
+            }
+          }
 
-        this.currentValue =
-          this.formatNumber(result);
+          // 計算が終わったので各種リセットして結果表示状態へ
+          this.storedValue = null;
+          this.operator = null;
+          this.currentState = 'RESULT_SHOWN';
+          this.clearPercentState();
+        }
+        break;
 
-        this.lastOperator = currentOperator;
+      // ---------------------------------------------------------
+      // 演算子入力直後に「=」を押した場合
+      // ---------------------------------------------------------
+      case 'WAITING_RIGHT':
+        if (this.previousRightOperand !== null && this.storedValue !== null && this.operator !== null) {
+          const result = this.calculateResult(this.previousRightOperand, this.storedValue, this.operator);
+          this.currentValue = this.formatNumber(result);
+          this.lastOperator = this.operator;
+          this.lastOperand = this.storedValue;
+        } else if (this.storedValue !== null && this.operator !== null) {
+          const rightValue = this.storedValue;
+          let implicitLeftValue = '0';
+          if (this.operator === '×') implicitLeftValue = rightValue;
+          else if (this.operator === '÷') implicitLeftValue = '1';
 
-        // 次の連続 = では元の左辺を繰り返す
-        this.lastOperand = base;
-
-        this.storedValue = null;
-        this.operator = null;
-        this.waitingForOperand = false;
-        this.calculationSource = 'EQUAL';
-
-        this.clearPercentState();
-
-        return;
-      }
-
-      // -------------------------------------------------------
-      // ×
-      //
-      // 50 × 20 %
-      // → 10
-      // =
-      // → 10 × 50 = 500
-      // =
-      // → 500 × 50 = 25000
-      // -------------------------------------------------------
-      if (currentOperator === '×') {
-
-        const result = this.calculateResult(
-          percentResult,
-          base,
-          currentOperator
-        );
-
-        this.currentValue =
-          this.formatNumber(result);
-
-        this.lastOperator = '×';
-        this.lastOperand = base;
-
-        this.storedValue = null;
-        this.operator = null;
-        this.waitingForOperand = false;
-        this.calculationSource = 'EQUAL';
-        this.clearPercentState();
-
-        return;
-      }
-
-      // -------------------------------------------------------
-      // ÷
-      // -------------------------------------------------------
-      if (currentOperator === '÷') {
-
-        const divisor =
-          this.percentOperand !== null
-            ? this.percentOperand
-            : this.percentChainOperand !== null
-              ? this.percentChainOperand
-              : this.percentBase;
-
-        if (divisor === null) {
-          return;
+          const result = this.calculateResult(implicitLeftValue, rightValue, this.operator);
+          this.currentValue = this.formatNumber(result);
+          this.lastOperator = this.operator;
+          this.lastOperand = rightValue;
         }
 
-        const result = this.calculateResult(
-          percentResult,
-          divisor,
-          currentOperator
-        );
-
-        this.currentValue =
-          this.formatNumber(result);
-
-        this.lastOperator = '÷';
-        this.lastOperand = divisor;
-
         this.storedValue = null;
         this.operator = null;
-        this.waitingForOperand = false;
-        this.calculationSource = 'EQUAL';
-
+        this.currentState = 'RESULT_SHOWN';
         this.clearPercentState();
+        break;
 
-        return;
-      }
-    }
+      // ---------------------------------------------------------
+      // 通常の = 
+      // ---------------------------------------------------------
+      case 'INPUT_RIGHT':
+        if (this.operator !== null && this.storedValue !== null) {
+          const leftValue = this.storedValue;
+          const rightValue = this.currentValue;
+          const result = this.calculateResult(leftValue, this.currentValue, this.operator);
+          this.currentValue = this.formatNumber(result);
 
+          this.lastOperator = this.operator;
+          this.lastOperand = this.operator === '×' ? leftValue : rightValue;
 
-    // =========================================================
-    // 「1 + =」や「3 + 3 - =」など
-    // 演算子入力直後に「=」を押した場合
-    // =========================================================
-    if (this.waitingForOperand) {
-
-      // -------------------------------------------------------
-      // 直前までに計算結果が存在する場合
-      //
-      // 例:
-      //
-      // 3 + 3 = 6
-      // - =
-      //
-      // この時点では
-      // lastOperand = 3
-      // storedValue = 6
-      // operator = -
-      //
-      // 実機では
-      // 3 - 6 = -3
-      //
-      // 次の = では
-      // -3 - 6 = -9
-      // -------------------------------------------------------
-      if (
-        this.previousRightOperand !== null &&
-        this.storedValue !== null &&
-        this.operator !== null
-      ) {
-
-        const previousRightValue = this.previousRightOperand;
-        const previousResult = this.storedValue;
-        const currentOperator = this.operator;
-        const result = this.calculateResult(
-          previousRightValue,
-          previousResult,
-          currentOperator
-        );
-
-        this.currentValue =
-          this.formatNumber(result);
-
-        // -----------------------------------------------------
-        // 次の連続「=」では、
-        // 直前の計算結果を繰り返し使用する
-        //
-        // 3 + 3 - =
-        // → 3 - 6 = -3
-        //
-        // 次:
-        // → -3 - 6 = -9
-        // → -9 - 6 = -15
-        //
-        // 5 - 2 - =
-        // → 2 - 3 = -1
-        //
-        // 次:
-        // → -1 - 3 = -4
-        // → -4 - 3 = -7
-        // -----------------------------------------------------
-        this.lastOperator = currentOperator;
-        this.lastOperand = previousResult;
-
-        this.storedValue = null;
-        this.operator = null;
-        this.waitingForOperand = false;
-        this.calculationSource = 'EQUAL';
-
-        this.clearPercentState();
-
-        return;
-      }
-
-      // -------------------------------------------------------
-      // まだ計算が存在しない場合
-      //
-      // 1 + =
-      // → 0 + 1 = 1
-      //
-      // 1 - =
-      // → 0 - 1 = -1
-      //
-      // その後の「=」では
-      //
-      // 1 + 1 = 2
-      // -1 - 1 = -2
-      //
-      // と連続する
-      // -------------------------------------------------------
-      if (
-        this.storedValue !== null &&
-        this.operator !== null
-      ) {
-        const rightValue = this.storedValue;
-        const currentOperator = this.operator;
-        let implicitLeftValue = '0';
-        if (currentOperator === '×') {
-          implicitLeftValue = rightValue; // 10 × = は 10 × 10 にする
-        } else if (currentOperator === '÷') {
-          implicitLeftValue = '1';          // 10 ÷ = は 1 ÷ 10 にする
+          this.storedValue = null;
+          this.operator = null;
+          this.currentState = 'RESULT_SHOWN';
+          this.clearPercentState();
         }
-
-        const result = this.calculateResult(
-          implicitLeftValue,
-          rightValue,
-          currentOperator
-        );
-
-        this.currentValue = this.formatNumber(result);
-        this.lastOperator = currentOperator;
-        this.lastOperand = rightValue;
-
-        this.storedValue = null;
-        this.operator = null;
-        this.waitingForOperand = false;
-        this.calculationSource = 'EQUAL';
-
-        this.clearPercentState();
-
-        return;
-      }
+        break;
     }
-    // =========================================================
-    // 演算子がない、または通常の = （1 + 3 = など）
-    // =========================================================
-
-    if (
-      this.operator === null ||
-      this.storedValue === null
-    ) {
-      this.calculationSource = 'EQUAL';
-      return;
-    }
-
-    const currentNumber = this.currentValue;
-    const currentOperator = this.operator;
-    const leftValue = this.storedValue;
-
-    const result = this.calculateResult(
-      this.storedValue,
-      currentNumber,
-      currentOperator,
-    );
-
-    this.currentValue = this.formatNumber(result);
-    this.lastOperator = currentOperator;
-
-    // =========================================================
-    // 連続 = 用に保存
-    // =========================================================
-    if (
-      currentOperator === '×') {
-      // 掛け算は「左辺」を繰り返す
-      this.lastOperand = leftValue;
-    } else {
-      // + - ÷ は通常通り「右辺」を繰り返す
-      this.lastOperand = currentNumber;
-    }
-
-    this.storedValue = null;
-    this.operator = null;
-    this.waitingForOperand = false;
-    this.calculationSource = 'EQUAL';
-
-    this.clearPercentState();
   }
-
-
-
   // =========================================================
   // 四則演算 （ BigIntを導入 ）
   // =========================================================
@@ -1061,6 +623,7 @@ export class App {
     rightStr: string,
     operator: Operator):
     string {
+    if (leftStr === 'NaN' || rightStr === 'NaN') return 'NaN';
     const left = this.toScaledBigInt(leftStr);
     const right = this.toScaledBigInt(rightStr);
     let result: bigint;
@@ -1144,28 +707,24 @@ export class App {
   // ±
   // =========================================================
   toggleSign(): void {
+    if (this.isOverflow) return;
 
-    if (this.isOverflow) {
-      return;
-    }
-
-    // =========================================================
-    // 演算子直後の ±
-    // → 演算子の左側にある数字を反転する
-    // → + - × ÷ 共通
-    // =========================================================
-    if (this.waitingForOperand && this.operator !== null) {
+    // 演算子直後の ± (左辺の符号を反転する特殊処理)
+    if (this.currentState === 'WAITING_RIGHT') {
       if (this.storedValue !== null) {
-        const wasSame = this.operator === '×' && this.previousRightOperand === this.storedValue; // 反転前
+        const oldStored = this.storedValue;
+        const wasSame = this.operator === '×' && this.previousRightOperand === this.storedValue;
         this.storedValue = this.storedValue.startsWith('-')
           ? this.storedValue.slice(1)
           : '-' + this.storedValue;
+
         if (wasSame) this.previousRightOperand = this.storedValue;
+        if (this.previousByOperator['×'] === oldStored) this.previousByOperator['×'] = this.storedValue;
         this.currentValue = this.storedValue;
       }
       return;
     }
-
+    // 通常の符号反転
     this.currentValue = this.currentValue.startsWith('-')
       ? this.currentValue.slice(1)
       : '-' + this.currentValue;
@@ -1174,42 +733,27 @@ export class App {
   // =========================================================
   // C
   // =========================================================
-
   clear(): void {
+    if (this.isOverflow) return;
 
-    if (this.isOverflow) {
-      return;
+    switch (this.currentState) {
+      case 'INITIAL':
+      case 'RESULT_SHOWN':
+      case 'WAITING_RIGHT':
+      case 'PERCENT_SHOWN':
+        // これらの状態の時は C ボタンを押しても消さない（ACのみ有効）
+        return;
+
+      case 'INPUT_LEFT':
+      case 'INPUT_RIGHT':
+      case 'SQRT_SHOWN':
+        // 現在表示している数字だけをクリア
+        this.currentValue = '0';
+
+        // 演算子が存在していれば右辺入力待ちへ、なければ初期状態へ
+        this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        break;
     }
-
-    // 計算結果表示中は C では消さない
-    // AC なら clearAll() で完全に消せる
-    if (this.calculationSource === 'EQUAL') {
-      return;
-    }
-
-    // 演算子直後は C では消さない
-    if (this.waitingForOperand) {
-      return;
-    }
-
-    //%を用いた計算結果は消さない
-    if (this.percentMode
-      && this.calculationSource === 'PERCENT') {
-      return;
-    }
-
-    if (this.currentValue === '-0' && !this.hasTypedInput) {
-      return;   // AC / C 直後の -0 は C では変わらない
-    }
-
-
-    // 現在表示している数字だけをクリア
-    this.currentValue = '0';
-    this.waitingForOperand = false;
-    this.calculationSource = 'NONE';
-    this.isOverflow = false;
-    this.clearPercentState();
-
   }
 
 
@@ -1219,14 +763,12 @@ export class App {
 
   clearAll(): void {
 
-    this.hasTypedInput = false;
     this.currentValue = '0';
     this.storedValue = null;
     this.operator = null;
 
-    this.waitingForOperand = false;
     this.isOverflow = false;
-    this.calculationSource = 'NONE';
+    this.currentState = 'INITIAL';
     this.resetRepeatState();
   }
 
@@ -1245,7 +787,6 @@ export class App {
 
   private clearPercentState(): void {
 
-    this.percentMode = false;
     this.percentChainOperand = null;
     this.percentBase = null;
     this.percentOperand = null;
@@ -1261,6 +802,7 @@ export class App {
     this.lastOperator = null;
     this.lastOperand = null;
     this.previousRightOperand = null;
+    this.previousByOperator = { '+': null, '-': null, '×': null, '÷': null };
     this.clearPercentState();
   }
 
@@ -1357,7 +899,7 @@ export class App {
   }
 
   get displayOperator(): string {
-    if (this.percentMode) {
+    if (this.currentState === 'PERCENT_SHOWN') {
       return '';
     }
     return this.operator ?? '';
