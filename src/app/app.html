@@ -7,7 +7,7 @@
     <div class="display-value">
       <span class="display-sign" *ngIf="displayPrefix === '－'">－</span>
     
-      <span class="display-e" *ngIf="isOverflow">E</span>
+      <span class="display-e" *ngIf="isError">E</span>
     
       <span class="display-number">{{ displayNumber }}</span>
     </div>

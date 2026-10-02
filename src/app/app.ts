@@ -30,7 +30,7 @@ export class App {
   currentValue = '0';
 
   // オーバーフロー表示
-  isOverflow = false;
+  isError = false;
 
   // 演算子を押す前に保存しておく左辺
   storedValue: string | null = null;
@@ -79,11 +79,17 @@ export class App {
   percentOperand: string | null = null;
 
   // =========================================================
+  // ＝の後の√入力
+  // =========================================================
+
+  sqrtFromResult = false;
+
+  // =========================================================
   // 数字入力
   // =========================================================
 
   inputDigit(digit: string): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     // ▼ 新しいステートマシンによる制御
     switch (this.currentState) {
@@ -118,7 +124,7 @@ export class App {
 
       case 'INPUT_LEFT':
       case 'INPUT_RIGHT':
-        // 0や-0の置き換え（hasTypedInputフラグを使わずにシンプルに判定可能に！）
+        // 0や-0の置き換え
         if (this.currentValue === '0') {
           this.currentValue = digit;
         } else if (this.currentValue === '-0') {
@@ -142,7 +148,7 @@ export class App {
   // =========================================================
 
   inputDecimal(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     switch (this.currentState) {
       case 'INITIAL':
@@ -181,7 +187,7 @@ export class App {
   // =========================================================
 
   inputOperator(nextOperator: Operator): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     const currentNumber = this.normalizeNumber(this.currentValue);
     this.currentValue = currentNumber;
@@ -253,7 +259,7 @@ export class App {
         this.clearPercentState();
         break;
 
-      case 'PERCENT_SHOWN':
+      case 'PERCENT_SHOWN':{
         const percentOrigin = this.percentBase !== null && this.percentOperand === null;
 
         if (percentOrigin) {
@@ -277,6 +283,7 @@ export class App {
         break;
     }
   }
+  }
 
 
   private setPrevious(map: Record<Operator, string | null>, next: Operator): void {
@@ -290,7 +297,7 @@ export class App {
   // %
   // =========================================================
   inputPercent(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     const currentNumber = this.currentValue;
     let finalResult = '0';
@@ -298,19 +305,24 @@ export class App {
     const state: CalculatorState =
       this.currentState === 'SQRT_SHOWN' && this.operator !== null
         ? 'INPUT_RIGHT'
+        :(this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult &&
+          this.lastOperator !==null && this.lastOperand !== null)
+          ? 'RESULT_SHOWN'
         : this.currentState;
     switch (state) {
       // -------------------------------------------------------
       // = の直後（定数を使った特殊な％計算）
       // -------------------------------------------------------
       case 'RESULT_SHOWN':
-        if (
-          this.lastOperator === null ||
-          this.lastOperator === '+' ||
+        if (this.lastOperator === null) return;
+          if (this.lastOperator === '+' ||
           this.lastOperator === '-') {
-          return;
+            if (this.currentState !== 'SQRT_SHOWN' || this.lastOperand === null) return;
+            const pct = this.calculateResult(this.currentValue, '100', '÷');
+            const delta = this.calculateResult(this.lastOperand, pct, '×');
+            finalResult = this.calculateResult(this.lastOperand, delta, this.lastOperator);
         }
-        if (this.lastOperator === '×' && this.lastOperand !== null) {
+        else if (this.lastOperator === '×' && this.lastOperand !== null) {
 
           const curPct = this.calculateResult(
             this.currentValue,
@@ -373,7 +385,7 @@ export class App {
           const pct = this.calculateResult('100', divisor, '÷');
           finalResult = this.calculateResult(this.currentValue, pct, '×');
         } else {
-          finalResult = this.percentWithRightOperand(this.storedValue, currentNumber);
+          finalResult = this.applyPercentWithRightOperand(this.storedValue, currentNumber);
         }
         this.currentValue = this.formatNumber(finalResult);
         this.currentState = 'PERCENT_SHOWN';
@@ -411,7 +423,7 @@ export class App {
           const pct = this.calculateResult('100', divisor, '÷');
           finalResult = this.calculateResult(currentNumber, pct, '×');
         } else {
-          finalResult = this.percentWithRightOperand(base, currentNumber);
+          finalResult = this.applyPercentWithRightOperand(base, currentNumber);
         }
         this.currentValue = this.formatNumber(finalResult);
         this.currentState = 'PERCENT_SHOWN';
@@ -420,8 +432,8 @@ export class App {
     }
   }
 
-  // 新規メソッド（inputPercent の下）: 旧 INPUT_RIGHT の「右辺がある場合」を共通化
-  private percentWithRightOperand(base: string, currentNumber: string): string {
+  // 新規メソッド（
+  private applyPercentWithRightOperand(base: string, currentNumber: string): string {
     this.percentBase = base;
     if (this.operator === '÷' && this.percentOperand !== null) {
       const pct = this.calculateResult(this.percentOperand, '100', '÷');
@@ -446,14 +458,18 @@ export class App {
   // =========================================================
 
   inputSquareRoot(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
+
+    this.sqrtFromResult =
+    this.currentState === 'RESULT_SHOWN' ||
+    (this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult);
 
     const valueStr = this.currentValue;
 
     // 負数の平方根
     if (valueStr.startsWith('-') && !/^-0\.?0*$/.test(valueStr)) {
       this.currentValue = '0';
-      this.isOverflow = true;
+      this.isError = true;
       this.currentState = 'SQRT_SHOWN';
       this.operator = null;
       this.resetRepeatState();
@@ -485,7 +501,7 @@ export class App {
   // =========================================================
 
   calculate(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     if (this.currentState !== 'WAITING_RIGHT') {
       this.currentValue = this.normalizeNumber(this.currentValue);
@@ -707,7 +723,7 @@ export class App {
   // ±
   // =========================================================
   toggleSign(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     // 演算子直後の ± (左辺の符号を反転する特殊処理)
     if (this.currentState === 'WAITING_RIGHT') {
@@ -734,7 +750,7 @@ export class App {
   // C
   // =========================================================
   clear(): void {
-    if (this.isOverflow) return;
+    if (this.isError) return;
 
     switch (this.currentState) {
       case 'INITIAL':
@@ -767,7 +783,7 @@ export class App {
     this.storedValue = null;
     this.operator = null;
 
-    this.isOverflow = false;
+    this.isError = false;
     this.currentState = 'INITIAL';
     this.resetRepeatState();
   }
@@ -814,7 +830,7 @@ export class App {
     if (valueStr === 'NaN' ||
       valueStr === 'Infinity' ||
       valueStr === '-Infinity') {
-      this.isOverflow = true;
+      this.isError = true;
       return '0';
     }
 
@@ -826,7 +842,7 @@ export class App {
       return this.formatOverflow(valueStr);
     }
 
-    this.isOverflow = false;
+    this.isError = false;
 
     let decimalDigits = 0;
     if (intPart === '0') {
@@ -858,7 +874,7 @@ export class App {
   // =========================================================
 
   private formatOverflow(valueStr: string): string {
-    this.isOverflow = true;
+    this.isError = true;
 
     const isNegative = valueStr.startsWith('-');
     const absValue = isNegative ? valueStr.slice(1) : valueStr;
@@ -891,7 +907,7 @@ export class App {
   }
 
   get displayExponent(): string {
-    return this.isOverflow ? 'E' : '';
+    return this.isError ? 'E' : '';
   }
 
   get displayNumber(): string {
