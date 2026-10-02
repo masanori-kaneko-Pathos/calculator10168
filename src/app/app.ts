@@ -782,7 +782,7 @@ export class App {
     this.currentValue = '0';
     this.storedValue = null;
     this.operator = null;
-
+    this.sqrtFromResult = false;
     this.isError = false;
     this.currentState = 'INITIAL';
     this.resetRepeatState();
