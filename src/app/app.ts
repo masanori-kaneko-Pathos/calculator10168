@@ -91,11 +91,10 @@ export class App {
   inputDigit(digit: string): void {
     if (this.isError) return;
 
-    // ▼ 新しいステートマシンによる制御
     switch (this.currentState) {
 
       case 'INITIAL':
-        this.currentValue = digit;          // inputDecimal は '0.'
+        this.currentValue = digit;    
         this.currentState = 'INPUT_LEFT';
         break;
 
@@ -336,14 +335,10 @@ export class App {
             '×'
           );
         } else if (this.lastOperator === '÷' && this.lastOperand !== null) {
-          const divisorPct = this.calculateResult(
-            this.lastOperand,
-            '100',
-            '÷'
-          );
+          const multiplied = this.calculateResult(this.currentValue, '100', '×');
           finalResult = this.calculateResult(
-            this.currentValue,
-            divisorPct,
+            multiplied,
+            this.lastOperand,
             '÷'
           );
         }
@@ -382,8 +377,8 @@ export class App {
         if (this.operator === '+' || this.operator === '-') return;
         if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
           const divisor = this.percentChainOperand ?? this.percentBase;
-          const pct = this.calculateResult('100', divisor, '÷');
-          finalResult = this.calculateResult(this.currentValue, pct, '×');
+          const multiplied = this.calculateResult(this.currentValue, '100', '×');
+          finalResult = this.calculateResult(multiplied, divisor, '÷');
         } else {
           finalResult = this.applyPercentWithRightOperand(this.storedValue, currentNumber);
         }
@@ -420,8 +415,8 @@ export class App {
         const base = this.storedValue!;
         if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
           const divisor = this.percentChainOperand ?? this.percentBase;
-          const pct = this.calculateResult('100', divisor, '÷');
-          finalResult = this.calculateResult(currentNumber, pct, '×');
+          const multiplied = this.calculateResult(this.currentValue, '100', '×');
+          finalResult = this.calculateResult(multiplied, divisor, '÷');
         } else {
           finalResult = this.applyPercentWithRightOperand(base, currentNumber);
         }
