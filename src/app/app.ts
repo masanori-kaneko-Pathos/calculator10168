@@ -94,7 +94,7 @@ export class App {
     switch (this.currentState) {
 
       case 'INITIAL':
-        this.currentValue = digit;    
+        this.currentValue = digit;
         this.currentState = 'INPUT_LEFT';
         break;
 
@@ -258,7 +258,7 @@ export class App {
         this.clearPercentState();
         break;
 
-      case 'PERCENT_SHOWN':{
+      case 'PERCENT_SHOWN': {
         const percentOrigin = this.percentBase !== null && this.percentOperand === null;
 
         if (percentOrigin) {
@@ -280,8 +280,8 @@ export class App {
         this.currentState = 'WAITING_RIGHT';
         this.clearPercentState();
         break;
+      }
     }
-  }
   }
 
 
@@ -304,22 +304,23 @@ export class App {
     const state: CalculatorState =
       this.currentState === 'SQRT_SHOWN' && this.operator !== null
         ? 'INPUT_RIGHT'
-        :(this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult &&
-          this.lastOperator !==null && this.lastOperand !== null)
+        : (this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult &&
+          this.lastOperator !== null && this.lastOperand !== null)
           ? 'RESULT_SHOWN'
-        : this.currentState;
+          : this.currentState;
     switch (state) {
       // -------------------------------------------------------
       // = の直後（定数を使った特殊な％計算）
       // -------------------------------------------------------
       case 'RESULT_SHOWN':
         if (this.lastOperator === null) return;
-          if (this.lastOperator === '+' ||
+        if (this.lastOperator === '+' ||
           this.lastOperator === '-') {
-            if (this.currentState !== 'SQRT_SHOWN' || this.lastOperand === null) return;
-            const pct = this.calculateResult(this.currentValue, '100', '÷');
-            const delta = this.calculateResult(this.lastOperand, pct, '×');
-            finalResult = this.calculateResult(this.lastOperand, delta, this.lastOperator);
+          if (this.currentState !== 'SQRT_SHOWN' || this.lastOperand === null) return;
+          const pct = this.calculateResult(this.currentValue, '100', '÷');
+          const delta = this.truncateToDisplay(
+            this.calculateResult(this.lastOperand, pct, '×'), this.lastOperand);          
+          finalResult = this.calculateResult(this.lastOperand, delta, this.lastOperator);
         }
         else if (this.lastOperator === '×' && this.lastOperand !== null) {
 
@@ -437,7 +438,7 @@ export class App {
     this.percentOperand = currentNumber;
     const curPct = this.calculateResult(currentNumber, '100', '÷');
     if (this.operator === '+' || this.operator === '-') {
-      const delta = this.calculateResult(base, curPct, '×');
+      const delta = this.truncateToDisplay(this.calculateResult(base, curPct, '×'), base);
       return this.calculateResult(base, delta, this.operator);
     } else if (this.operator === '×') {
       return this.calculateResult(base, curPct, '×');
@@ -456,8 +457,8 @@ export class App {
     if (this.isError) return;
 
     this.sqrtFromResult =
-    this.currentState === 'RESULT_SHOWN' ||
-    (this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult);
+      this.currentState === 'RESULT_SHOWN' ||
+      (this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult);
 
     const valueStr = this.currentValue;
 
@@ -821,6 +822,19 @@ export class App {
   // 表示用数値整形
   // =========================================================
 
+  private truncateToDisplay(valueStr: string, digitsBasis: string = valueStr): string {
+    const isNegative = valueStr.startsWith('-');
+    const absValue = isNegative ? valueStr.slice(1) : valueStr;
+    const [intPart, fracPart = ''] = absValue.split('.');
+    if (intPart.length > 10) return valueStr; // オーバーフローはそのまま
+
+    const basisInt = digitsBasis.replace(/^-/, '').split('.')[0];
+    const decimalDigits = basisInt === '0' ? 8 : Math.min(8, Math.max(0, 10 - basisInt.length));
+    const truncatedFrac = fracPart.slice(0, decimalDigits).replace(/0+$/, '');
+    const result = truncatedFrac.length > 0 ? `${intPart}.${truncatedFrac}` : intPart;
+    return isNegative && result !== '0' ? `-${result}` : result;
+  }
+
   private formatNumber(valueStr: string): string {
     if (valueStr === 'NaN' ||
       valueStr === 'Infinity' ||
@@ -838,19 +852,7 @@ export class App {
     }
 
     this.isError = false;
-
-    let decimalDigits = 0;
-    if (intPart === '0') {
-      decimalDigits = 8;
-    } else {
-      decimalDigits = Math.min(8, Math.max(0, 10 - intPart.length));
-    }
-
-    // 文字列のまま切り捨て（丸め込みによる繰り上げを絶対に起こさせない）
-    const truncatedFrac = fracPart.slice(0, decimalDigits).replace(/0+$/, '');
-    const result = truncatedFrac.length > 0 ? `${intPart}.${truncatedFrac}` : intPart;
-
-    return isNegative && result !== '0' ? `-${result}` : result;
+    return this.truncateToDisplay(valueStr);
   }
 
 
