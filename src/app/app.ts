@@ -264,7 +264,7 @@ export class App {
         if (percentOrigin) {
           // ％起点の連鎖（50×%など）は、大元の左辺(50)を暗黙の右辺として退避させる
           const b = this.storedValue;
-          this.setPrevious({ '×': b, '÷': b, '+': b, '-': b }, nextOperator);
+          this.setPrevious({ '×': currentNumber, '÷': '1', '+': b, '-': b }, nextOperator);
         } else {
           // 普通の％計算結果（50×20%など）は、通常の計算結果（RESULT_SHOWN）直後と同じ振る舞いにする
           this.setPrevious({
@@ -910,7 +910,7 @@ export class App {
   }
 
   get displayOperator(): string {
-    if (this.currentState === 'PERCENT_SHOWN') {
+    if (this.isError || this.currentState === 'PERCENT_SHOWN') {
       return '';
     }
     return this.operator ?? '';
