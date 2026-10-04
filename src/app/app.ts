@@ -116,7 +116,7 @@ export class App {
       case 'SQRT_SHOWN':
         this.currentValue = digit;
         this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
-        this.digitAfterPercent = false;
+        this.digitAfterPercent = this.percentBase !== null;
         break;
 
       case 'PERCENT_SHOWN':
@@ -168,7 +168,7 @@ export class App {
 
       case 'SQRT_SHOWN':
       case 'PERCENT_SHOWN':
-        this.digitAfterPercent = this.currentState === 'PERCENT_SHOWN';
+        this.digitAfterPercent = this.currentState === 'PERCENT_SHOWN' || this.percentBase !==null;
         this.currentValue = '0.';
         this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
         break;
