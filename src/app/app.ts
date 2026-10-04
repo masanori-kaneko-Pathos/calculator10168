@@ -84,6 +84,9 @@ export class App {
 
   sqrtFromResult = false;
 
+  // ％の直後に数字・小数点を打った（新しい左辺として扱う）
+  private digitAfterPercent = false;
+
   // =========================================================
   // 数字入力
   // =========================================================
@@ -113,12 +116,14 @@ export class App {
       case 'SQRT_SHOWN':
         this.currentValue = digit;
         this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        this.digitAfterPercent = false;
         break;
 
       case 'PERCENT_SHOWN':
         // %直後の数字入力：画面を置き換えて新しい入力状態へ
         this.currentValue = digit;
         this.currentState = this.operator ? 'INPUT_RIGHT' : 'INPUT_LEFT';
+        this.digitAfterPercent = true;
         break;
 
       case 'INPUT_LEFT':
@@ -163,6 +168,7 @@ export class App {
 
       case 'SQRT_SHOWN':
       case 'PERCENT_SHOWN':
+        this.digitAfterPercent = this.currentState === 'PERCENT_SHOWN';
         this.currentValue = '0.';
         this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
         break;
@@ -220,7 +226,8 @@ export class App {
 
           const leftValue = this.storedValue;
 
-          const percentOrigin = this.percentBase !== null && this.percentOperand === null;
+          const percentOrigin = this.percentBase !== null &&
+            (this.percentOperand === null || this.digitAfterPercent);
           const resultStr = percentOrigin ? currentNumber : this.formatNumber(this.calculateResult(
             leftValue,
             currentNumber,
@@ -228,7 +235,11 @@ export class App {
           ));
           this.percentChainOperand = percentOrigin ? currentNumber : null;
 
-          const addSubPrev = (this.operator === '×' || percentOrigin) ? leftValue : currentNumber;
+          // ％の直後の数字で ÷ を続ける場合は、割った数（％の数字）が暗黙の右辺になる
+          //   50 ÷ 20 % 5 + = → 5 + 20 = 25
+          const addSubPrev = percentOrigin
+            ? this.percentImplicitRight(leftValue)
+            : (this.operator === '×' ? leftValue : currentNumber);
           this.setPrevious({
             '×': percentOrigin ? currentNumber : resultStr,
             '÷': '1',
@@ -259,21 +270,14 @@ export class App {
         break;
 
       case 'PERCENT_SHOWN': {
-        const percentOrigin = this.percentBase !== null && this.percentOperand === null;
-
-        if (percentOrigin) {
-          // ％起点の連鎖（50×%など）は、大元の左辺(50)を暗黙の右辺として退避させる
-          const b = this.storedValue;
-          this.setPrevious({ '×': currentNumber, '÷': '1', '+': b, '-': b }, nextOperator);
-        } else {
-          // 普通の％計算結果（50×20%など）は、通常の計算結果（RESULT_SHOWN）直後と同じ振る舞いにする
-          this.setPrevious({
-            '×': currentNumber,
-            '÷': '1',
-            '+': this.storedValue,
-            '-': this.storedValue,
-          }, nextOperator);
-        }
+        
+        const addSubPrev = this.percentImplicitRight(this.storedValue);
+        this.setPrevious({
+          '×': currentNumber,
+          '÷': '1',
+          '+': addSubPrev,
+          '-': addSubPrev,
+        }, nextOperator);
 
         this.storedValue = currentNumber;
         this.operator = nextOperator;
@@ -290,6 +294,19 @@ export class App {
     this.previousRightOperand = map[next];
   }
 
+  // ÷ の「割る数」。％の数字 > ％連鎖の数字 > ％の基準値 の優先順
+  private percentDivisor(): string | null {
+    return this.percentOperand ?? this.percentChainOperand ?? this.percentBase;
+  }
+
+  // ％の直後に + / - を続けたとき、= の繰り返しで使われる暗黙の右辺
+  //   50 ÷ 20 % + = → 250 + 20 = 270 （÷ は割った数）
+  //   それ以外は退避しておいた左辺 fallback をそのまま使う
+  private percentImplicitRight(fallback: string | null): string | null {
+    return this.operator === '÷' && this.percentOperand !== null
+      ? this.percentOperand
+      : fallback;
+  }
 
 
   // =========================================================
@@ -319,7 +336,7 @@ export class App {
           if (this.currentState !== 'SQRT_SHOWN' || this.lastOperand === null) return;
           const pct = this.calculateResult(this.currentValue, '100', '÷');
           const delta = this.truncateToDisplay(
-            this.calculateResult(this.lastOperand, pct, '×'), this.lastOperand);          
+            this.calculateResult(this.lastOperand, pct, '×'), this.lastOperand);
           finalResult = this.calculateResult(this.lastOperand, delta, this.lastOperator);
         }
         else if (this.lastOperator === '×' && this.lastOperand !== null) {
@@ -377,7 +394,7 @@ export class App {
         if (this.operator === null || this.storedValue === null) return;
         if (this.operator === '+' || this.operator === '-') return;
         if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
-          const divisor = this.percentChainOperand ?? this.percentBase;
+          const divisor = this.percentDivisor()!;
           const multiplied = this.calculateResult(this.currentValue, '100', '×');
           finalResult = this.calculateResult(multiplied, divisor, '÷');
         } else {
@@ -415,7 +432,7 @@ export class App {
       case 'INPUT_RIGHT': {
         const base = this.storedValue!;
         if (this.operator === '÷' && this.percentBase !== null && this.percentOperand === null) {
-          const divisor = this.percentChainOperand ?? this.percentBase;
+          const divisor = this.percentDivisor()!;
           const multiplied = this.calculateResult(this.currentValue, '100', '×');
           finalResult = this.calculateResult(multiplied, divisor, '÷');
         } else {
@@ -560,9 +577,7 @@ export class App {
             this.lastOperator = '×';
             this.lastOperand = base;
           } else if (currentOperator === '÷') {
-            const divisor = this.percentOperand !== null ? this.percentOperand
-              : this.percentChainOperand !== null ? this.percentChainOperand
-                : this.percentBase;
+            const divisor = this.percentDivisor();
             if (divisor !== null) {
               const result = this.calculateResult(percentResult, divisor, currentOperator);
               this.currentValue = this.formatNumber(result);
@@ -611,13 +626,19 @@ export class App {
       // ---------------------------------------------------------
       case 'INPUT_RIGHT':
         if (this.operator !== null && this.storedValue !== null) {
-          const leftValue = this.storedValue;
-          const rightValue = this.currentValue;
-          const result = this.calculateResult(leftValue, this.currentValue, this.operator);
+          // ％の直後に数字を打った場合は、その数字が左辺、％の基準値（÷は割る数）が右辺になる
+          //   50 − 20 % 5 = → 5 − 50 = -45 / 50 ÷ % 5 = → 5 ÷ 50 = 0.1
+          const afterPercent = this.digitAfterPercent && this.percentBase !== null;
+          const divisor = this.percentOperand ?? this.percentChainOperand ?? this.percentBase;
+          const leftValue = afterPercent ? this.currentValue : this.storedValue;
+          const rightValue = afterPercent
+          ? (this.operator === '÷' ? this.percentDivisor()! : this.percentBase!)
+            : this.currentValue;
+          const result = this.calculateResult(leftValue, rightValue, this.operator);
           this.currentValue = this.formatNumber(result);
 
           this.lastOperator = this.operator;
-          this.lastOperand = this.operator === '×' ? leftValue : rightValue;
+          this.lastOperand = (this.operator === '×' && !afterPercent) ? leftValue : rightValue;
 
           this.storedValue = null;
           this.operator = null;
@@ -802,6 +823,7 @@ export class App {
     this.percentChainOperand = null;
     this.percentBase = null;
     this.percentOperand = null;
+    this.digitAfterPercent = false;
   }
 
 
