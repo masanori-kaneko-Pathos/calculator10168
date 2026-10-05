@@ -87,6 +87,8 @@ export class App {
   // ％の直後に数字・小数点を打った（新しい左辺として扱う）
   private digitAfterPercent = false;
 
+  private percentAfterResult = false;
+
   // =========================================================
   // 数字入力
   // =========================================================
@@ -168,7 +170,7 @@ export class App {
 
       case 'SQRT_SHOWN':
       case 'PERCENT_SHOWN':
-        this.digitAfterPercent = this.currentState === 'PERCENT_SHOWN' || this.percentBase !==null;
+        this.digitAfterPercent = this.currentState === 'PERCENT_SHOWN' || this.percentBase !== null;
         this.currentValue = '0.';
         this.currentState = this.operator !== null ? 'INPUT_RIGHT' : 'INPUT_LEFT';
         break;
@@ -196,6 +198,8 @@ export class App {
 
     const currentNumber = this.normalizeNumber(this.currentValue);
     this.currentValue = currentNumber;
+    const afterResultPercent = this.percentAfterResult;
+    this.percentAfterResult = false;
 
     const state: CalculatorState =
       this.currentState === 'SQRT_SHOWN' && this.operator !== null
@@ -208,7 +212,13 @@ export class App {
       case 'INPUT_LEFT':
         // 最初の演算子入力
         this.storedValue = currentNumber;
-        this.setPrevious({ '+': null, '-': null, '×': null, '÷': null }, nextOperator);
+        this.setPrevious({
+          '+': afterResultPercent ? this.lastOperand : null,
+          '-': afterResultPercent ? this.lastOperand : null,
+          '×': null,
+          '÷': null,
+        }, nextOperator);
+
         this.operator = nextOperator;
         this.currentState = 'WAITING_RIGHT';
         break;
@@ -270,7 +280,7 @@ export class App {
         break;
 
       case 'PERCENT_SHOWN': {
-        
+
         const addSubPrev = this.percentImplicitRight(this.storedValue);
         this.setPrevious({
           '×': currentNumber,
@@ -324,7 +334,12 @@ export class App {
         : (this.currentState === 'SQRT_SHOWN' && this.sqrtFromResult &&
           this.lastOperator !== null && this.lastOperand !== null)
           ? 'RESULT_SHOWN'
-          : this.currentState;
+          // 「＝ → ％」の直後に打った数字への ％ も、直前の演算（lastOperator/lastOperand）で計算する
+          //   10 ÷ 4 = % 2 % → 2 × 100 ÷ 4 = 50
+          : (this.currentState === 'INPUT_LEFT' && this.operator === null &&
+            this.lastOperator !== null && this.lastOperand !== null)
+            ? 'RESULT_SHOWN'
+            : this.currentState;
     switch (state) {
       // -------------------------------------------------------
       // = の直後（定数を使った特殊な％計算）
@@ -333,11 +348,11 @@ export class App {
         if (this.lastOperator === null) return;
         if (this.lastOperator === '+' ||
           this.lastOperator === '-') {
-          if (this.currentState !== 'SQRT_SHOWN' || this.lastOperand === null) return;
+          if (this.currentState === 'RESULT_SHOWN' || this.lastOperand === null) return;
           const pct = this.calculateResult(this.currentValue, '100', '÷');
           const delta = this.truncateToDisplay(
             this.calculateResult(this.lastOperand, pct, '×'), this.lastOperand);
-          finalResult = this.calculateResult(this.lastOperand, delta, this.lastOperator);
+            finalResult = this.overflowToError(this.calculateResult(this.lastOperand, delta, this.lastOperator));
         }
         else if (this.lastOperator === '×' && this.lastOperand !== null) {
 
@@ -362,6 +377,7 @@ export class App {
         }
         this.currentValue = this.formatNumber(finalResult);
         this.currentState = 'RESULT_SHOWN';
+        this.percentAfterResult = true;
         break;
 
       // -------------------------------------------------------
@@ -445,7 +461,7 @@ export class App {
     }
   }
 
-  // 新規メソッド（
+  // 新規メソッド
   private applyPercentWithRightOperand(base: string, currentNumber: string): string {
     this.percentBase = base;
     if (this.operator === '÷' && this.percentOperand !== null) {
@@ -456,7 +472,7 @@ export class App {
     const curPct = this.calculateResult(currentNumber, '100', '÷');
     if (this.operator === '+' || this.operator === '-') {
       const delta = this.truncateToDisplay(this.calculateResult(base, curPct, '×'), base);
-      return this.calculateResult(base, delta, this.operator);
+      return this.overflowToError(this.calculateResult(base, delta, this.operator));
     } else if (this.operator === '×') {
       return this.calculateResult(base, curPct, '×');
     } else if (this.operator === '÷') {
@@ -515,6 +531,7 @@ export class App {
 
   calculate(): void {
     if (this.isError) return;
+    this.percentAfterResult = false;
 
     if (this.currentState !== 'WAITING_RIGHT') {
       this.currentValue = this.normalizeNumber(this.currentValue);
@@ -629,10 +646,9 @@ export class App {
           // ％の直後に数字を打った場合は、その数字が左辺、％の基準値（÷は割る数）が右辺になる
           //   50 − 20 % 5 = → 5 − 50 = -45 / 50 ÷ % 5 = → 5 ÷ 50 = 0.1
           const afterPercent = this.digitAfterPercent && this.percentBase !== null;
-          const divisor = this.percentOperand ?? this.percentChainOperand ?? this.percentBase;
           const leftValue = afterPercent ? this.currentValue : this.storedValue;
           const rightValue = afterPercent
-          ? (this.operator === '÷' ? this.percentDivisor()! : this.percentBase!)
+            ? (this.operator === '÷' ? this.percentDivisor()! : this.percentBase!)
             : this.currentValue;
           const result = this.calculateResult(leftValue, rightValue, this.operator);
           this.currentValue = this.formatNumber(result);
@@ -814,9 +830,9 @@ export class App {
     }
     return result === '-0' ? '0' : result;
   }
-  // =========================================================
+  // ================================================
   // %状態解除
-  // =========================================================
+  // ================================================
 
   private clearPercentState(): void {
 
@@ -833,6 +849,7 @@ export class App {
 
   private resetRepeatState(): void {
 
+    this.percentAfterResult = false;
     this.lastOperator = null;
     this.lastOperand = null;
     this.previousRightOperand = null;
@@ -916,6 +933,19 @@ export class App {
       ? `-${mantissaText}`
       : mantissaText;
   }
+
+  // =========================================================
+  // + / -の%によるオーバーフロー
+  // =========================================================
+
+  private overflowToError(r: string): string {
+
+    return r.replace(/^-/, '').split('.')[0].length > 10 ? 'NaN' : r;
+
+  }
+
+
+
   // =========================================================
   // ディスプレイの記号
   // =========================================================
